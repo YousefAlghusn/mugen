@@ -32,28 +32,32 @@ for the next.
 ## PHASE 1 — Infrastructure (Docker)
 
 ### 1.1 compose.yml
-- [ ] Kafka + Zookeeper (confluentinc images)
-- [ ] Redis (redis:7-alpine)
-- [ ] MongoDB (mongo:7)
-- [ ] SQL Server (mcr.microsoft.com/mssql/server:2022-latest)
-- [ ] Postgres (postgres:16-alpine)
-- [ ] MinIO (minio/minio)
-- [ ] Elasticsearch (elasticsearch:8.x)
-- [ ] Eureka server (standalone Spring Boot in Docker)
-- [ ] Jaeger (jaegertracing/all-in-one)
-- [ ] Prometheus (prom/prometheus)
-- [ ] Loki (grafana/loki)
-- [ ] Grafana (grafana/grafana) with datasources auto-configured
-- [ ] mugen-network bridge network for all containers
-- [ ] Health checks on every container
-- [ ] MinIO bucket init (create all 4 buckets on startup)
-- [ ] Kafka topic init (create all topics on startup)
+- [x] Kafka + Zookeeper (confluentinc images)
+- [x] Redis (redis:7-alpine)
+- [x] MongoDB (mongo:7)
+- [x] SQL Server (mcr.microsoft.com/mssql/server:2022-latest)
+- [x] Postgres (postgres:16-alpine)
+- [x] MinIO (minio/minio)
+- [x] Elasticsearch (elasticsearch:8.x)
+- [x] Eureka server (standalone Spring Boot in Docker — new standalone `eureka-server/` Maven module + Dockerfile, not part of the mugen-parent reactor)
+- [x] Jaeger (jaegertracing/all-in-one)
+- [x] Prometheus (prom/prometheus)
+- [x] Loki (grafana/loki)
+- [x] Grafana (grafana/grafana) with datasources auto-configured
+- [x] mugen-network bridge network for all containers
+- [x] Health checks on every container
+- [x] MinIO bucket init (create all 4 buckets on startup)
+- [x] Kafka topic init (create all topics on startup)
+- [x] (extra, needed for correctness) Postgres multi-db init script — POSTGRES_DB only creates one DB, mugen-payment needs its own
+- [x] (extra, needed for correctness) SQL Server init one-shot — SQL Server has no POSTGRES_DB-style auto-create; Flyway (2.2) only manages schema inside an existing DB
 
 ### 1.2 config/ folder
-- [ ] config/prometheus/prometheus.yml (scrape all services)
-- [ ] config/grafana/datasources/datasources.yml (Jaeger+Prometheus+Loki)
-- [ ] config/loki/loki-config.yml
-- [ ] config/kafka/init-topics.sh (create all mugen.* topics)
+- [x] config/prometheus/prometheus.yml (scrape all services)
+- [x] config/grafana/datasources/datasources.yml (Jaeger+Prometheus+Loki)
+- [x] config/loki/loki-config.yml
+- [x] config/kafka/init-topics.sh (create all mugen.* topics)
+- [x] config/postgres/init-multi-db.sh
+- [x] config/sqlserver/init-db.sh
 
 ---
 

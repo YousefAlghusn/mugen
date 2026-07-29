@@ -1,7 +1,7 @@
 # Current state
 
 ## Status
-Phase 0.2 complete. Maven build unverified in this environment — no Java/Maven on PATH in the dev shell (open in IntelliJ to build, or install a JDK 21 + Maven and re-check).
+Phase 1 complete. compose.yml syntax-validated via `docker compose config`, but the Docker daemon was not running in this environment so the stack itself hasn't been brought up yet — do that before starting Phase 2 (Flyway will need a live SQL Server).
 
 ## Done
 - [x] Full architecture designed
@@ -13,9 +13,10 @@ Phase 0.2 complete. Maven build unverified in this environment — no Java/Maven
 - [x] tasks.md written and ordered
 - [x] Phase 0.1 — root pom.xml (Spring Boot 4.1.0 parent, Spring Cloud 2025.1.2 BOM), .gitignore, .env/.env.example, folder structure (services/, shared/, config/, http/)
 - [x] Phase 0.2 — mugen-shared module: 7 Kafka event records (com.mugen.shared.event), ApiResponse<T>/ApiError (com.mugen.shared.response), ErrorCode enum (com.mugen.shared.error), TraceIdHolder MDC utility (com.mugen.shared.trace), JwtClaims record (com.mugen.shared.auth)
+- [x] Phase 1 — compose.yml (16 services) + config/{prometheus,grafana,loki,kafka,postgres,sqlserver}. Added a standalone `eureka-server/` Maven module (own parent = spring-boot-starter-parent, NOT part of the mugen-parent reactor — keeps its Docker build independent of the other 10 services' pom.xml not existing yet) since there's no official Eureka image. Service port scheme fixed in .env: gateway 8080, auth 8081, user 8082, post 8083, feed 8084, notification 8085, payment 8086, video 8087, transcode 8088, search 8089, eureka 8761 — app services run on the host (`mvn spring-boot:run`), so Prometheus scrapes them via host.docker.internal.
 
 ## Up next
-Phase 1.1 — compose.yml (all infra containers: Kafka+ZK, Redis, MongoDB, SQL Server, Postgres, MinIO, Elasticsearch, Eureka, Jaeger, Prometheus, Loki, Grafana)
+Phase 2 — mugen-auth service (Maven module, RS256 keypair, SQL Server + Flyway, JWT/session services, exception handling, controllers)
 
 ## Key decisions
 - Name: Mugen (無限)
