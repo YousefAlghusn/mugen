@@ -42,6 +42,18 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-jpa</artifactId>
         </dependency>
+        <!--
+            Boot 4 split autoconfiguration into one module per technology, so
+            flyway-core on its own gets you the library with no autoconfiguration
+            and migrations silently never run — the schema simply is not there.
+            (In Boot 3 flyway-core alone was sufficient.) This module carries
+            FlywayAutoConfiguration and must be present in every service that
+            migrates a relational schema.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-flyway</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.flywaydb</groupId>
             <artifactId>flyway-core</artifactId>

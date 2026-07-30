@@ -92,6 +92,19 @@
         </dependencies>
     </dependencyManagement>
 
+    <!--
+        Inherited by every module. optional=true keeps Lombok off the runtime
+        classpath and out of downstream consumers' dependency graphs — it is a
+        compile-time annotation processor, nothing more.
+    -->
+    <dependencies>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+    </dependencies>
+
     <build>
         <pluginManagement>
             <plugins>

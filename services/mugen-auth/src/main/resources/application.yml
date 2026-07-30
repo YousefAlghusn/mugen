@@ -86,9 +86,13 @@ spring:
   jackson:
     default-property-inclusion: non_null
     deserialization:
+      # Tolerate fields a newer producer added — same forward-compatibility rule
+      # the Kafka event contracts rely on.
       fail-on-unknown-properties: false
-    serialization:
-      write-dates-as-timestamps: false
+    # No write-dates-as-timestamps here: Boot 4 ships Jackson 3, which moved that
+    # flag off SerializationFeature and defaults dates to ISO-8601 anyway. Setting
+    # it fails context startup with "No enum constant SerializationFeature
+    # .write-dates-as-timestamps".
 
 eureka:
   client:

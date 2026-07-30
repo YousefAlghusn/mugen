@@ -75,12 +75,15 @@ for the next.
       gateway — see keys/README.md for regeneration)
 
 ### 2.2 Database layer
-- [ ] V1__create_users.sql
-- [ ] V2__create_sessions.sql (with token_version column)
-- [ ] V3__create_oauth_links.sql
-- [ ] User entity + UserRepository
-- [ ] Session entity + SessionRepository
-- [ ] OAuthLink entity + OAuthLinkRepository
+- [x] V1__create_users.sql (+ user_roles child table)
+- [x] V2__create_sessions.sql (with token_version column)
+- [x] V3__create_oauth_links.sql
+- [x] User entity + UserRepository
+- [x] Session entity + SessionRepository
+- [x] OAuthLink entity + OAuthLinkRepository
+- [x] (extra) SchemaIntegrationTest — 9 tests proving the migrations and the JPA
+      mappings agree against a real SQL Server via Testcontainers. This is what
+      caught the two Boot 4 issues below.
 
 ### 2.3 Security config
 - [ ] JwkKeyConfig (load RSA keypair as beans)
