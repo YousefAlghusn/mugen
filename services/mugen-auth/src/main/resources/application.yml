@@ -1,0 +1,139 @@
+# Default profile = development on the HOST (IntelliJ / ./mvnw spring-boot:run)
+# talking to the dockerized infra through published ports. Every value falls back
+# to a working localhost default, so `./mvnw spring-boot:run` works with no
+# environment setup at all; the MUGEN_* overrides come from .env Section B when
+# they are exported into the run configuration.
+#
+# The `docker` profile (application-docker.yml) is for when this service is itself
+# containerised for deployment — it swaps localhost for Docker network hostnames.
+
+server:
+  port: ${AUTH_SERVICE_PORT:8081}
+  shutdown: graceful
+  error:
+    # Never leak stack traces or internal messages to clients — the
+    # GlobalExceptionHandler is the only thing allowed to shape error bodies.
+    include-stacktrace: never
+    include-message: never
+
+spring:
+  application:
+    name: mugen-auth
+
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+
+  # Java 21 virtual threads: this service is request-per-thread and blocking
+  # (JDBC, Redis, HTTP), which is exactly the shape virtual threads help.
+  threads:
+    virtual:
+      enabled: true
+
+  datasource:
+    url: ${MUGEN_SQLSERVER_URL:jdbc:sqlserver://localhost:1433;databaseName=mugen_auth;encrypt=true;trustServerCertificate=true}
+    username: ${MUGEN_SQLSERVER_USER:sa}
+    password: ${MUGEN_SQLSERVER_PASSWORD:ChangeMe_Str0ng!}
+    hikari:
+      pool-name: mugen-auth-pool
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 10000
+
+  jpa:
+    hibernate:
+      # Flyway owns the schema. `validate` makes the app refuse to start if the
+      # entities and the migrated schema have drifted apart, which is what you
+      # want — `update` would silently paper over a missing migration.
+      ddl-auto: validate
+    # Off deliberately. open-in-view keeps a JPA session open for the whole
+    # request, hiding lazy-loading bugs behind a connection held far too long.
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    # The database itself is created by config/sqlserver/init-db.sh; Flyway only
+    # manages schema inside it.
+    baseline-on-migrate: false
+
+  data:
+    redis:
+      host: ${MUGEN_REDIS_HOST:localhost}
+      port: ${MUGEN_REDIS_PORT:6379}
+      timeout: 2s
+
+  kafka:
+    bootstrap-servers: ${MUGEN_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      # acks=all + idempotence: a registration event must not be lost or
+      # duplicated on broker retry. mugen-user and mugen-search both key off it.
+      acks: all
+      properties:
+        enable.idempotence: true
+        max.in.flight.requests.per.connection: 5
+      retries: 3
+
+  mvc:
+    problemdetails:
+      enabled: true
+
+  jackson:
+    default-property-inclusion: non_null
+    deserialization:
+      fail-on-unknown-properties: false
+    serialization:
+      write-dates-as-timestamps: false
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${MUGEN_EUREKA_URI:http://localhost:8761/eureka}
+  instance:
+    # Host-run services register by IP; the Docker-internal hostname would be
+    # unresolvable to anything outside the compose network.
+    prefer-ip-address: true
+
+# ---------------------------------------------------------------------------
+# JWT — RS256 asymmetric. mugen-auth holds the private key and is the only
+# service that can mint a token; mugen-gateway gets public.pem and verifies
+# with zero DB calls.
+# ---------------------------------------------------------------------------
+mugen:
+  jwt:
+    private-key: ${JWT_PRIVATE_KEY_PATH:classpath:keys/private.pem}
+    public-key: ${JWT_PUBLIC_KEY_PATH:classpath:keys/public.pem}
+    issuer: mugen-auth
+    access-token-ttl: ${JWT_ACCESS_TOKEN_TTL_MINUTES:15}m
+    refresh-token-ttl: ${JWT_REFRESH_TOKEN_TTL_DAYS:30}d
+    revocation-cache-ttl: ${JWT_REVOCATION_CACHE_TTL_MINUTES:15}m
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: when-authorized
+      probes:
+        enabled: true
+  otlp:
+    tracing:
+      # OTLP over HTTP, not gRPC — this is why compose publishes Jaeger's 4318.
+      endpoint: ${MUGEN_OTLP_TRACING_ENDPOINT:http://localhost:4318/v1/traces}
+  tracing:
+    sampling:
+      # Sample everything in dev. Must be lowered in production.
+      probability: 1.0
+
+logging:
+  level:
+    com.mugen.auth: DEBUG
+    # Uncomment when debugging Flyway/JPA schema drift.
+    # org.hibernate.SQL: DEBUG

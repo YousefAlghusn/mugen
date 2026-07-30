@@ -1,0 +1,37 @@
+# Profile: docker
+#
+# Only for when mugen-auth is ITSELF running as a container (deployment), built
+# from this module's own Dockerfile. It is NOT the development profile — in
+# development the service runs on the host and the default profile applies.
+#
+# The single difference is addressing: inside the compose network, infra is
+# reached by service name, and Kafka must use the INTERNAL listener (29092).
+# From the host those names do not resolve, and 29092 is not published.
+
+spring:
+  datasource:
+    url: jdbc:sqlserver://${SQLSERVER_HOST:sqlserver}:${SQLSERVER_PORT:1433};databaseName=${SQLSERVER_DB:mugen_auth};encrypt=true;trustServerCertificate=true
+    username: ${SQLSERVER_USER:sa}
+    password: ${SQLSERVER_PASSWORD}
+
+  data:
+    redis:
+      host: ${REDIS_HOST:redis}
+      port: ${REDIS_PORT:6379}
+
+  kafka:
+    # INTERNAL listener. localhost:9092 is the host-facing EXTERNAL one and is
+    # meaningless from inside a container.
+    bootstrap-servers: ${KAFKA_HOST:kafka}:29092
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://${EUREKA_HOST:eureka}:${EUREKA_PORT:8761}/eureka
+  instance:
+    prefer-ip-address: false
+
+management:
+  otlp:
+    tracing:
+      endpoint: http://${JAEGER_HOST:jaeger}:${JAEGER_OTLP_HTTP_PORT:4318}/v1/traces

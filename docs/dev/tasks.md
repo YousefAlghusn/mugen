@@ -66,9 +66,13 @@ for the next.
 ## PHASE 2 — Auth Service
 
 ### 2.1 mugen-auth setup
-- [ ] Maven module + dependencies (Spring Security, JJWT, Flyway, SQL Server driver)
-- [ ] application.yml + application-docker.yml
-- [ ] Generate RS256 keypair → src/main/resources/keys/private.pem + public.pem
+- [x] Maven module + dependencies (Spring Security, JJWT, Flyway, SQL Server driver)
+- [x] application.yml (default = host-run dev) + application-docker.yml
+      (only for when the service itself is containerised — see CLAUDE.md
+      "Dev vs deploy")
+- [x] Generate RS256 keypair → src/main/resources/keys/private.pem + public.pem
+      (2048-bit PKCS#8; private.pem gitignored, public.pem committed for the
+      gateway — see keys/README.md for regeneration)
 
 ### 2.2 Database layer
 - [ ] V1__create_users.sql

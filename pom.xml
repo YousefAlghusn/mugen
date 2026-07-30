@@ -26,6 +26,7 @@
     -->
     <modules>
         <module>shared/mugen-shared</module>
+        <module>services/mugen-auth</module>
     </modules>
 
     <properties>
@@ -35,6 +36,9 @@
         <spring-cloud.version>2025.1.2</spring-cloud.version>
         <maven-enforcer-plugin.version>3.5.0</maven-enforcer-plugin.version>
         <minimum-maven.version>3.9.0</minimum-maven.version>
+        <!-- Not managed by the Boot BOM. mugen-auth signs, mugen-gateway verifies. -->
+        <jjwt.version>0.12.6</jjwt.version>
+        <testcontainers.version>1.20.6</testcontainers.version>
     </properties>
 
     <dependencyManagement>
@@ -46,11 +50,44 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+            <!--
+                The Boot 4.1 BOM manages spring-boot-testcontainers but not the
+                org.testcontainers modules themselves, so their BOM is imported
+                here to keep every service's container versions aligned.
+            -->
+            <dependency>
+                <groupId>org.testcontainers</groupId>
+                <artifactId>testcontainers-bom</artifactId>
+                <version>${testcontainers.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
             <!-- Managed here so services depend on mugen-shared without repeating the version. -->
             <dependency>
                 <groupId>com.mugen</groupId>
                 <artifactId>mugen-shared</artifactId>
                 <version>${project.version}</version>
+            </dependency>
+
+            <!--
+                JJWT splits into api / impl / jackson deliberately: only the api is a
+                compile dependency, the other two are runtime-only so application code
+                cannot accidentally bind to internals.
+            -->
+            <dependency>
+                <groupId>io.jsonwebtoken</groupId>
+                <artifactId>jjwt-api</artifactId>
+                <version>${jjwt.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.jsonwebtoken</groupId>
+                <artifactId>jjwt-impl</artifactId>
+                <version>${jjwt.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.jsonwebtoken</groupId>
+                <artifactId>jjwt-jackson</artifactId>
+                <version>${jjwt.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
