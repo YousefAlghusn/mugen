@@ -1,0 +1,9 @@
+# Keep the build context tiny — target/ in particular would otherwise be
+# shipped to the daemon and invalidate the cache on every local build.
+target/
+*.iml
+.idea/
+.git/
+.gitignore
+Dockerfile
+.dockerignore

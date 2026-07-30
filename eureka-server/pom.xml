@@ -52,6 +52,16 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
+        <!--
+            Actuator alone does not expose /actuator/prometheus — it only
+            appears once a Prometheus MeterRegistry is on the classpath.
+            Without this the scrape job in config/prometheus/prometheus.yml
+            gets a 404 and fails silently.
+        -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
     </dependencies>
 
     <build>

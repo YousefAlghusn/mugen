@@ -1,5 +1,5 @@
 server:
-  port: 8761
+  port: ${EUREKA_PORT:8761}
 
 spring:
   application:
@@ -7,18 +7,27 @@ spring:
 
 eureka:
   instance:
-    hostname: eureka
+    hostname: ${EUREKA_HOSTNAME:eureka}
   client:
+    # This is the registry itself — it must not try to register with, or
+    # fetch from, a peer. Single-node setup, no peer replication.
     register-with-eureka: false
     fetch-registry: false
     service-url:
       defaultZone: http://${eureka.instance.hostname}:${server.port}/eureka/
+  server:
+    # Self-preservation stops Eureka evicting instances when it thinks it has
+    # lost too many heartbeats. On a dev machine, services are killed and
+    # restarted constantly, so leaving it on means the registry fills with
+    # dead instances that never expire. Off here; must stay ON in production.
+    enable-self-preservation: false
+    eviction-interval-timer-in-ms: 15000
 
 management:
   endpoints:
     web:
       exposure:
-        include: health,prometheus
+        include: health,info,prometheus
   endpoint:
     health:
       show-details: always
