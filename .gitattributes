@@ -1,4 +1,15 @@
 * text=auto eol=lf
 
 *.sh text eol=lf
+mvnw text eol=lf
+
+# Windows batch scripts must keep CRLF — LF endings break label/goto handling.
 *.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Never let autocrlf mangle keys or binaries.
+*.pem -text
+*.jar binary
+*.zip binary
+*.png binary
+*.jpg binary

@@ -19,18 +19,13 @@
     <name>mugen-parent</name>
     <description>Mugen - infinite content, infinite community. Root aggregator module.</description>
 
+    <!--
+        Modules are declared as they are created (see docs/dev/tasks.md). Declaring a
+        module whose pom.xml does not exist yet breaks every Maven command at the root,
+        so a service is added here in the same commit that creates it.
+    -->
     <modules>
         <module>shared/mugen-shared</module>
-        <module>services/mugen-auth</module>
-        <module>services/mugen-gateway</module>
-        <module>services/mugen-user</module>
-        <module>services/mugen-post</module>
-        <module>services/mugen-feed</module>
-        <module>services/mugen-notification</module>
-        <module>services/mugen-payment</module>
-        <module>services/mugen-video</module>
-        <module>services/mugen-transcode</module>
-        <module>services/mugen-search</module>
     </modules>
 
     <properties>
@@ -38,6 +33,8 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <spring-cloud.version>2025.1.2</spring-cloud.version>
+        <maven-enforcer-plugin.version>3.5.0</maven-enforcer-plugin.version>
+        <minimum-maven.version>3.9.0</minimum-maven.version>
     </properties>
 
     <dependencyManagement>
@@ -48,6 +45,12 @@
                 <version>${spring-cloud.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
+            </dependency>
+            <!-- Managed here so services depend on mugen-shared without repeating the version. -->
+            <dependency>
+                <groupId>com.mugen</groupId>
+                <artifactId>mugen-shared</artifactId>
+                <version>${project.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
@@ -61,6 +64,65 @@
                 </plugin>
             </plugins>
         </pluginManagement>
+
+        <plugins>
+            <!-- Fail fast and loudly if the toolchain is not what every module assumes. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <version>${maven-enforcer-plugin.version}</version>
+                <executions>
+                    <execution>
+                        <id>enforce-toolchain</id>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <requireMavenVersion>
+                                    <version>[${minimum-maven.version},)</version>
+                                </requireMavenVersion>
+                                <requireJavaVersion>
+                                    <version>[${java.version},)</version>
+                                </requireJavaVersion>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!--
+                Unit tests (surefire, `mvn test`) stay fast and dependency-free.
+                Testcontainers-backed *IntegrationTest classes are handed to failsafe
+                and only run under `mvn verify`, which needs a Docker daemon.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <excludes>
+                        <exclude>**/*IntegrationTest.java</exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <configuration>
+                    <includes>
+                        <include>**/*IntegrationTest.java</include>
+                    </includes>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
     </build>
 
 </project>
