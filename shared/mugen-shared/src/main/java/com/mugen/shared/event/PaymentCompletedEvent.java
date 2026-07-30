@@ -1,5 +1,7 @@
 package com.mugen.shared.event;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
@@ -9,6 +11,7 @@ import java.util.UUID;
  * Producer: mugen-payment
  * Consumers: mugen-notification
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public record PaymentCompletedEvent(
         UUID eventId,
         UUID paymentId,
@@ -16,5 +19,5 @@ public record PaymentCompletedEvent(
         BigDecimal amount,
         String currency,
         Instant occurredAt
-) {
+) implements DomainEvent {
 }

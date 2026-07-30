@@ -1,0 +1,60 @@
+package com.mugen.shared.trace;
+
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.slf4j.MDC;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+class TraceIdHolderTest {
+
+    @AfterEach
+    void tearDown() {
+        TraceIdHolder.clear();
+    }
+
+    @Test
+    @DisplayName("get() returns null when no span is in scope")
+    void getReturnsNullWhenUnset() {
+        assertThat(TraceIdHolder.get()).isNull();
+    }
+
+    @Test
+    @DisplayName("getOrCreate() does not overwrite an id the tracer already set")
+    void getOrCreateDefersToExistingId() {
+        // Simulates Micrometer Tracing having populated the MDC from a
+        // traceparent header. Minting a second id here would decouple the
+        // log's trace id from the one Jaeger recorded.
+        String fromTracer = "4bf92f3577b34da6a3ce929d0e0e4736";
+        MDC.put(TraceIdHolder.TRACE_ID_KEY, fromTracer);
+
+        assertThat(TraceIdHolder.getOrCreate()).isEqualTo(fromTracer);
+    }
+
+    @Test
+    @DisplayName("getOrCreate() fallback matches the W3C trace-id shape")
+    void getOrCreateFallbackIsW3CShaped() {
+        String generated = TraceIdHolder.getOrCreate();
+
+        // 32 lower-case hex chars, per W3C Trace Context — not a dashed UUID,
+        // so consumers never have to handle two formats.
+        assertThat(generated).matches("[0-9a-f]{32}");
+        assertThat(MDC.get(TraceIdHolder.TRACE_ID_KEY)).isEqualTo(generated);
+    }
+
+    @Test
+    @DisplayName("getOrCreate() is stable within a request")
+    void getOrCreateIsStableOnRepeatCalls() {
+        assertThat(TraceIdHolder.getOrCreate()).isEqualTo(TraceIdHolder.getOrCreate());
+    }
+
+    @Test
+    @DisplayName("clear() removes the id so a pooled thread cannot leak it")
+    void clearRemovesId() {
+        TraceIdHolder.set("4bf92f3577b34da6a3ce929d0e0e4736");
+        TraceIdHolder.clear();
+
+        assertThat(TraceIdHolder.get()).isNull();
+    }
+}

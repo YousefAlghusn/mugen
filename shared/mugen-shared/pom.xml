@@ -26,6 +26,40 @@
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
         </dependency>
+        <!-- Instant (de)serialization for the event contracts' occurredAt. -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.datatype</groupId>
+            <artifactId>jackson-datatype-jsr310</artifactId>
+        </dependency>
+
+        <!--
+            Plain JUnit + AssertJ rather than spring-boot-starter-test: this
+            module has no Spring context, and pulling the full starter in would
+            let a Spring dependency leak into what is meant to be a pure
+            contract jar shared by all 11 services.
+        -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!--
+            Test scope only. A library must never ship an SLF4J binding — that is
+            the consuming application's choice — but without a provider on the
+            classpath MDC silently degrades to a no-op adapter, so TraceIdHolder
+            would appear to work while storing nothing. Services get logback via
+            spring-boot-starter-logging; the tests need it explicitly.
+        -->
+        <dependency>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-classic</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
 </project>
