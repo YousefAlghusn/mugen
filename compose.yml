@@ -5,8 +5,6 @@ networks:
     driver: bridge
 
 volumes:
-  zookeeper-data:
-  zookeeper-log:
   kafka-data:
   redis-data:
   mongodb-data:
@@ -21,52 +19,47 @@ volumes:
 services:
 
   # ==================================================================
-  # Kafka + Zookeeper
+  # Kafka — KRaft mode, single node acting as both controller and broker.
+  # No ZooKeeper: it is deprecated by KIP-500 and removed in Kafka 4.0.
+  #
+  # Three listeners, because three different callers need different addresses:
+  #   CONTROLLER 29093 — the KRaft quorum talking to itself
+  #   INTERNAL   29092 — other containers, reached as kafka:29092
+  #   EXTERNAL    9092 — services running on the host, reached as localhost:9092
   # ==================================================================
-  zookeeper:
-    image: confluentinc/cp-zookeeper:7.6.1
-    container_name: mugen-zookeeper
-    networks: [mugen-network]
-    environment:
-      ZOOKEEPER_CLIENT_PORT: ${ZOOKEEPER_PORT}
-      ZOOKEEPER_TICK_TIME: 2000
-    volumes:
-      - zookeeper-data:/var/lib/zookeeper/data
-      - zookeeper-log:/var/lib/zookeeper/log
-    healthcheck:
-      test: ["CMD-SHELL", "echo ruok | nc -w 2 localhost ${ZOOKEEPER_PORT} | grep imok"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-
   kafka:
-    image: confluentinc/cp-kafka:7.6.1
+    image: apache/kafka:4.0.0
     container_name: mugen-kafka
     networks: [mugen-network]
-    depends_on:
-      zookeeper:
-        condition: service_healthy
     ports:
       - "${KAFKA_PORT}:${KAFKA_PORT}"
     environment:
-      KAFKA_BROKER_ID: ${KAFKA_BROKER_ID}
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:${ZOOKEEPER_PORT}
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
-      KAFKA_LISTENERS: INTERNAL://0.0.0.0:29092,EXTERNAL://0.0.0.0:${KAFKA_PORT}
+      CLUSTER_ID: ${KAFKA_CLUSTER_ID:?KAFKA_CLUSTER_ID is required}
+      KAFKA_NODE_ID: ${KAFKA_NODE_ID}
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: ${KAFKA_NODE_ID}@kafka:29093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_LISTENERS: CONTROLLER://0.0.0.0:29093,INTERNAL://0.0.0.0:29092,EXTERNAL://0.0.0.0:${KAFKA_PORT}
       KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:29092,EXTERNAL://localhost:${KAFKA_PORT}
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
       KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      # Single-node dev cluster: skip the rebalance delay so consumers join instantly.
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
     volumes:
       - kafka-data:/var/lib/kafka/data
     healthcheck:
-      test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:${KAFKA_PORT} --list"]
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:29092 --list || exit 1"]
       interval: 10s
       timeout: 10s
       retries: 10
+      start_period: 20s
 
   kafka-init:
-    image: confluentinc/cp-kafka:7.6.1
+    image: apache/kafka:4.0.0
     container_name: mugen-kafka-init
     networks: [mugen-network]
     depends_on:
@@ -74,7 +67,7 @@ services:
         condition: service_healthy
     volumes:
       - ./config/kafka/init-topics.sh:/init-topics.sh:ro
-    entrypoint: ["bash", "/init-topics.sh"]
+    entrypoint: ["/bin/bash", "/init-topics.sh"]
     restart: "no"
 
   # ==================================================================
@@ -104,8 +97,8 @@ services:
     ports:
       - "${MONGO_PORT}:${MONGO_PORT}"
     environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME:?required}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD:?required}
     volumes:
       - mongodb-data:/data/db
     healthcheck:
@@ -124,8 +117,8 @@ services:
     ports:
       - "${SQLSERVER_PORT}:${SQLSERVER_PORT}"
     environment:
-      ACCEPT_EULA: ${SQLSERVER_ACCEPT_EULA}
-      MSSQL_SA_PASSWORD: ${SQLSERVER_PASSWORD}
+      ACCEPT_EULA: ${SQLSERVER_ACCEPT_EULA:?required}
+      MSSQL_SA_PASSWORD: ${SQLSERVER_PASSWORD:?required}
     volumes:
       - sqlserver-data:/var/opt/mssql
     healthcheck:
@@ -143,10 +136,10 @@ services:
       sqlserver:
         condition: service_healthy
     environment:
-      SQLSERVER_HOST: ${SQLSERVER_HOST}
-      SQLSERVER_USER: ${SQLSERVER_USER}
-      SQLSERVER_PASSWORD: ${SQLSERVER_PASSWORD}
-      SQLSERVER_DB: ${SQLSERVER_DB}
+      SQLSERVER_HOST: ${SQLSERVER_HOST:?required}
+      SQLSERVER_USER: ${SQLSERVER_USER:?required}
+      SQLSERVER_PASSWORD: ${SQLSERVER_PASSWORD:?required}
+      SQLSERVER_DB: ${SQLSERVER_DB:?required}
     volumes:
       - ./config/sqlserver/init-db.sh:/init-db.sh:ro
     entrypoint: ["bash", "/init-db.sh"]
@@ -162,10 +155,10 @@ services:
     ports:
       - "${POSTGRES_PORT}:${POSTGRES_PORT}"
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_USER_DB}
-      POSTGRES_PAYMENT_DB: ${POSTGRES_PAYMENT_DB}
+      POSTGRES_USER: ${POSTGRES_USER:?required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?required}
+      POSTGRES_DB: ${POSTGRES_USER_DB:?required}
+      POSTGRES_PAYMENT_DB: ${POSTGRES_PAYMENT_DB:?required}
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./config/postgres/init-multi-db.sh:/docker-entrypoint-initdb.d/init-multi-db.sh:ro
@@ -186,8 +179,8 @@ services:
       - "${MINIO_API_PORT}:${MINIO_API_PORT}"
       - "${MINIO_CONSOLE_PORT}:${MINIO_CONSOLE_PORT}"
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?required}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?required}
     command: server /data --console-address ":${MINIO_CONSOLE_PORT}"
     volumes:
       - minio-data:/data
@@ -205,9 +198,9 @@ services:
       minio:
         condition: service_healthy
     environment:
-      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:?required}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?required}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?required}
       MINIO_BUCKET_AVATARS: ${MINIO_BUCKET_AVATARS}
       MINIO_BUCKET_RAW: ${MINIO_BUCKET_RAW}
       MINIO_BUCKET_HLS: ${MINIO_BUCKET_HLS}
@@ -271,6 +264,9 @@ services:
     ports:
       - "${JAEGER_UI_PORT}:${JAEGER_UI_PORT}"
       - "${JAEGER_OTLP_GRPC_PORT}:${JAEGER_OTLP_GRPC_PORT}"
+      # Spring Boot's management.otlp.tracing exporter speaks OTLP over HTTP,
+      # not gRPC — without 4318 published, host-run services emit into a void.
+      - "${JAEGER_OTLP_HTTP_PORT}:${JAEGER_OTLP_HTTP_PORT}"
     environment:
       COLLECTOR_OTLP_ENABLED: "true"
     healthcheck:
@@ -317,14 +313,17 @@ services:
     container_name: mugen-grafana
     networks: [mugen-network]
     depends_on:
-      - prometheus
-      - loki
-      - jaeger
+      prometheus:
+        condition: service_healthy
+      loki:
+        condition: service_healthy
+      jaeger:
+        condition: service_healthy
     ports:
       - "${GRAFANA_PORT}:${GRAFANA_PORT}"
     environment:
-      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:?required}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?required}
     volumes:
       - ./config/grafana/datasources:/etc/grafana/provisioning/datasources:ro
       - grafana-data:/var/lib/grafana

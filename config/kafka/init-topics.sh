@@ -1,9 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Reached over the INTERNAL listener — this runs as a container on mugen-network.
 BOOTSTRAP_SERVER="kafka:29092"
 PARTITIONS=3
 REPLICATION_FACTOR=1
+
+# The official apache/kafka image ships the CLI under /opt/kafka/bin with .sh
+# suffixes, unlike the confluentinc images which put bare names on PATH.
+KAFKA_TOPICS="/opt/kafka/bin/kafka-topics.sh"
 
 TOPICS=(
   "mugen.user.registered"
@@ -17,7 +22,7 @@ TOPICS=(
 
 for topic in "${TOPICS[@]}"; do
   echo "Creating topic: ${topic}"
-  kafka-topics --create --if-not-exists \
+  "${KAFKA_TOPICS}" --create --if-not-exists \
     --bootstrap-server "${BOOTSTRAP_SERVER}" \
     --topic "${topic}" \
     --partitions "${PARTITIONS}" \
@@ -25,4 +30,4 @@ for topic in "${TOPICS[@]}"; do
 done
 
 echo "All mugen.* topics created."
-kafka-topics --bootstrap-server "${BOOTSTRAP_SERVER}" --list
+"${KAFKA_TOPICS}" --bootstrap-server "${BOOTSTRAP_SERVER}" --list

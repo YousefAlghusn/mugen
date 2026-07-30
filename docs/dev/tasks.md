@@ -32,7 +32,9 @@ for the next.
 ## PHASE 1 — Infrastructure (Docker)
 
 ### 1.1 compose.yml
-- [x] Kafka + Zookeeper (confluentinc images)
+- [x] Kafka in KRaft mode, single node as combined broker+controller
+      (official `apache/kafka` image; ZooKeeper dropped — deprecated by
+      KIP-500 and removed in Kafka 4.0)
 - [x] Redis (redis:7-alpine)
 - [x] MongoDB (mongo:7)
 - [x] SQL Server (mcr.microsoft.com/mssql/server:2022-latest)
