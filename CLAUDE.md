@@ -32,9 +32,25 @@ e.g. com.mugen.auth, com.mugen.gateway, com.mugen.user
 - SQL Server (auth), Postgres (user, payment)
 - MongoDB (post, video, feed, notification)
 - Redis (cache, sessions, rate limiting, revocation cache)
-- Kafka (async events), MinIO (file storage), Elasticsearch (search)
+- Kafka (async events, KRaft mode — no ZooKeeper), MinIO (file storage), Elasticsearch (search)
 - Eureka (discovery)
 - Observability: Jaeger + Prometheus + Grafana + Loki
+- Build: Maven Wrapper (`./mvnw`) — do not assume a `mvn` on PATH
+
+## Dev vs deploy — two different containerisation stories
+- **Root `compose.yml` is infrastructure ONLY.** Databases, Kafka, Redis, MinIO,
+  Elasticsearch, Eureka, observability. It never contains an application service.
+- **In development the 11 services run on the host**, from IntelliJ or `./mvnw
+  spring-boot:run`. That is what gives you debugging, hot reload and breakpoints.
+- **Each service owns a `Dockerfile` in its own module**, used for deployment only —
+  never wired into the root compose. Use `eureka-server/Dockerfile` as the template:
+  layered-jar extraction, non-root user, `-XX:MaxRAMPercentage`, plus a `.dockerignore`.
+- Consequence for config: services on the host reach infra at **localhost:<published
+  port>**, never at the Docker hostname. `kafka:29092` is container-only and
+  `localhost:9092` is host-only — see the header of `.env.example`.
+- `.env` is read by Docker Compose, NOT by Spring. Section A is compose-side,
+  Section B is for the host-run services and must be exported into the run
+  configuration (IntelliJ EnvFile plugin) to have any effect.
 
 ## Architecture rules
 - Services NEVER share databases or call each other's DB directly
@@ -89,7 +105,17 @@ e.g. com.mugen.auth, com.mugen.gateway, com.mugen.user
 - Never OFFSET
 
 ## Commands
-- Start infra:   docker compose up -d
-- Start service: cd services/mugen-auth && mvn spring-boot:run -Dspring-boot.run.profiles=docker
-- Run tests:     mvn test
-- Build:         mvn clean package -DskipTests
+Always `./mvnw` (`.\mvnw.cmd` on Windows), never a bare `mvn` — the wrapper
+pins Maven 3.9.9 and there may be no Maven installed at all.
+
+- Start infra:      docker compose up -d
+- Stop infra:       docker compose down          (add -v to wipe volumes)
+- Start service:    cd services/mugen-auth && ../../mvnw spring-boot:run
+                    (runs on the host against the dockerized infra; the default
+                     profile points at localhost — see "Dev vs deploy" above)
+- Unit tests:       ./mvnw test                  (fast, no Docker needed)
+- All tests:        ./mvnw verify                (adds *IntegrationTest via
+                     failsafe — needs a running Docker daemon for Testcontainers)
+- Build:            ./mvnw clean package -DskipTests
+
+Toolchain note: JDK 21 is required and enforced by maven-enforcer-plugin.
