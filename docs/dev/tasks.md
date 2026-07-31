@@ -171,6 +171,49 @@ for the next.
 
 ---
 
+## PHASE 3.5 — Config Server
+
+Deliberately scheduled here, not earlier. It touches every service's config
+bootstrapping, so it is done once the gateway has proven the multi-service
+config shape — 2 services to migrate instead of 11, and 3 real config shapes
+(auth, gateway, shared defaults) to factor from rather than guessing off one.
+
+Spring Cloud's third foundational piece alongside Eureka (done) and Gateway
+(3.x). Without it, changing a Kafka address or log level means editing 11
+application.yml files and restarting each.
+
+### 3.5.1 config-server module
+- [ ] Standalone Maven module, NOT in the mugen-parent reactor — same reasoning
+      as `eureka-server/`: its Dockerfile must build without sibling modules
+- [ ] `@EnableConfigServer`, port 8888
+- [ ] Dockerfile + .dockerignore (use eureka-server as the template)
+- [ ] Add to compose.yml as infra + health check
+
+### 3.5.2 config-repo
+- [ ] `config-repo/` git-backed store: `application.yml` (shared defaults),
+      `mugen-auth.yml`, `mugen-gateway.yml`
+- [ ] Native/filesystem backend for local dev, git backend for deploy
+
+### 3.5.3 Client wiring (per service)
+- [ ] `spring.config.import: "optional:configserver:http://localhost:8888"`
+      — the `optional:` prefix is required, not cosmetic: without it a service
+      refuses to start when the config server is down, which breaks the
+      run-from-IntelliJ dev story (see CLAUDE.md "Dev vs deploy").
+      NOTE: bootstrap.yml is gone in modern Spring Cloud — do not reintroduce it.
+- [ ] `@RefreshScope` + `/actuator/refresh` on values worth changing at runtime
+
+### 3.5.4 Secrets — decided: env passthrough
+- [ ] Config Server holds NON-SECRET config only: hosts, ports, TTLs, log
+      levels, feature flags
+- [ ] Passwords, OAuth client secrets and keys stay as environment variables
+      resolved per service. Nothing sensitive enters the config repo, so no
+      `{cipher}` key to protect and rotate.
+- [ ] **`private.pem` never goes in Config Server.** Even encrypted, anyone with
+      config-repo read access could mint tokens for any user — exactly what
+      RS256 asymmetric signing exists to prevent.
+
+---
+
 ## PHASE 4 — User Service
 
 ### 4.1 mugen-user setup

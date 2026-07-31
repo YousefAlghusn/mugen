@@ -33,7 +33,9 @@ e.g. com.mugen.auth, com.mugen.gateway, com.mugen.user
 - MongoDB (post, video, feed, notification)
 - Redis (cache, sessions, rate limiting, revocation cache)
 - Kafka (async events, KRaft mode — no ZooKeeper), MinIO (file storage), Elasticsearch (search)
-- Eureka (discovery)
+- Eureka (discovery), Spring Cloud Config Server (centralised config — Phase 3.5,
+  after the gateway; clients use `spring.config.import: "optional:configserver:..."`
+  so a service still starts when it is down)
 - Observability: Jaeger + Prometheus + Grafana + Loki
 - Build: Maven Wrapper (`./mvnw`) — do not assume a `mvn` on PATH
 

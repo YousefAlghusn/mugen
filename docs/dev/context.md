@@ -80,3 +80,9 @@ Phase 2 — mugen-auth service (Maven module, RS256 keypair, SQL Server + Flyway
   run on the host from IntelliJ (debugging, hot reload). Each service gets its own
   Dockerfile in its own module for deployment, never wired into the root compose.
 - Kafka runs KRaft, not ZooKeeper (removed in Kafka 4.0)
+- JWT handling uses Spring Security's JOSE support (Nimbus), not JJWT — one
+  implementation signs in auth and verifies in the gateway
+- Config Server is scheduled for Phase 3.5 (after the gateway), not earlier: it
+  touches every service's config bootstrapping, so it is cheaper once the
+  multi-service config shape exists. Secrets stay as env passthrough — the
+  config repo holds non-secret config only, and never `private.pem`.
