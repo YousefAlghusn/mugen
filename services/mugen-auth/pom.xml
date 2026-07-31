@@ -105,6 +105,11 @@
             <groupId>com.mugen</groupId>
             <artifactId>mugen-shared</artifactId>
         </dependency>
+        <!-- Brings the AppException hierarchy and auto-registers the RFC 9457 handler. -->
+        <dependency>
+            <groupId>com.mugen</groupId>
+            <artifactId>mugen-web</artifactId>
+        </dependency>
 
         <!-- ============================= Observability ============================== -->
         <dependency>

@@ -108,8 +108,15 @@ for the next.
 - [ ] RevocationCacheService (write on revoke, check, 15 min TTL)
 
 ### 2.6 Exception handling
-- [ ] Copy exception hierarchy from reference repo (AppException + subclasses)
-- [ ] GlobalExceptionHandler (RFC 9457 ProblemDetail + traceId)
+- [x] Exception hierarchy (AppException + ResourceNotFound / Conflict /
+      BusinessRule / Forbidden / Unauthorized)
+- [x] GlobalExceptionHandler (RFC 9457 ProblemDetail + traceId + errors[])
+- [x] AuthExceptions — mugen-auth's typed failures
+- **Deviation:** these live in a new `shared/mugen-web` module and are
+  auto-configured, NOT copied per service. Eleven copies of the same classes is
+  eleven places for the error contract to drift. Services still get "one
+  GlobalExceptionHandler per service" semantics — they can add their own advice
+  or override the bean.
 
 ### 2.7 Controllers
 - [ ] AuthController (/register, /login, /refresh, /logout)

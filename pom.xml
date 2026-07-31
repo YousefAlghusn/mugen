@@ -26,6 +26,7 @@
     -->
     <modules>
         <module>shared/mugen-shared</module>
+        <module>shared/mugen-web</module>
         <module>services/mugen-auth</module>
     </modules>
 
@@ -64,6 +65,11 @@
             <dependency>
                 <groupId>com.mugen</groupId>
                 <artifactId>mugen-shared</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.mugen</groupId>
+                <artifactId>mugen-web</artifactId>
                 <version>${project.version}</version>
             </dependency>
         </dependencies>

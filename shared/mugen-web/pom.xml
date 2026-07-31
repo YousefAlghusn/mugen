@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.mugen</groupId>
+        <artifactId>mugen-parent</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>mugen-web</artifactId>
+    <packaging>jar</packaging>
+
+    <name>mugen-web</name>
+    <description>
+        Shared web concerns: the AppException hierarchy and the RFC 9457 ProblemDetail
+        handler, auto-configured so every service gets identical error responses by
+        adding one dependency rather than copying eight classes eleven times.
+    </description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.mugen</groupId>
+            <artifactId>mugen-shared</artifactId>
+        </dependency>
+
+        <!--
+            Spring MVC + validation are needed to compile the handler. They are
+            optional so this jar never drags a web stack into a module that does not
+            already have one — mugen-transcode, for instance, is a headless worker.
+            Any service that consumes the handler necessarily has these already.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+</project>
