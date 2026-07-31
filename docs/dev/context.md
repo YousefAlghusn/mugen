@@ -1,11 +1,14 @@
 # Current state
 
 ## Status
-Phase 1 complete, then a full review pass over Phases 0–1 (see "Review pass" below).
-compose.yml re-validated via `docker compose config`. The stack still has not been
-brought up against a live Docker daemon — do that before starting Phase 2 (Flyway
-needs a live SQL Server), and it is also the only way to confirm the KRaft broker
-and the new eureka-server Dockerfile actually build and start.
+Phase 2 (mugen-auth) is complete except 2.8 — the Kafka `mugen.user.registered`
+publisher — which is the next task. 46 unit + 22 integration tests green.
+
+The integration suite has now run against a live Docker daemon (2026-07-31), which
+had never happened before. It immediately earned its keep: two context-load failures
+that no unit test could see are recorded under "Boot 4 module splits" below. The
+full compose stack still has not been brought up — Testcontainers starts its own
+SQL Server and Redis, so that remains unproven.
 
 ## Toolchain on this machine
 - JDK 21: `C:\Users\youse\.jdks\ms-21.0.12` (Microsoft OpenJDK, installed via IntelliJ)
@@ -58,13 +61,57 @@ Fixed:
   classpath MDC is a silent no-op, so `logback-classic` is a required *test*
   dependency — the library itself still ships no binding.
 
+## Phase 2 — SSO (2026-07-31)
+- The authorization code flow is driven explicitly, not through `oauth2Login()`.
+  Spring's login chain ends in an authenticated servlet session and mugen has none:
+  a sign-in has to end in the same access token and rotating refresh cookie a
+  password login produces. Both routes converge on `AuthService.issueTokens`. The
+  protocol steps are still Spring Security's, so there is no hand-written OAuth.
+- **An unverified provider email is refused, never matched onto an account.** It is
+  only a claim; honouring one would let anyone put a stranger's address on a
+  throwaway provider account and take over — or pre-emptively squat — the matching
+  mugen account. A *verified* address does link to an existing account, on the same
+  reasoning a password reset relies on.
+- `state` is single-use, held in Redis, and bound to the provider that issued it.
+- The flow is also bound to the browser that started it, via a `SameSite=Lax` nonce
+  cookie. `state` alone does not stop login CSRF — an attacker can start their own
+  sign-in, obtain a genuine code+state, and lure a victim through the callback into
+  the attacker's account. Lax and not Strict because the callback arrives as a
+  cross-site top-level navigation from the provider, on which Strict is never sent.
+- The callback sets only the refresh cookie and redirects; the access token is never
+  in a URL, where it would reach browser history, `Referer` and every proxy log.
+- Credentials live in `application-sso.yml` behind the `sso` profile. Boot rejects a
+  blank client-id, so putting them in the default profile would stop mugen-auth
+  booting on any machine without Google and GitHub credentials. With the profile off
+  there is no `ClientRegistrationRepository`, and the /sso endpoints answer 404.
+
+## Boot 4 module splits (bites once per technology)
+Boot 4 split autoconfiguration into one module per technology — the same trap as the
+`spring-boot-flyway` note already in mugen-auth's pom. Three hit in one sitting:
+- `spring-boot-restclient` — without it there is no `RestClient.Builder` bean at all,
+  though `RestClient` itself is right there in spring-web. Inject the bean rather
+  than `RestClient.create()`: it carries the service's Jackson config, including
+  `fail-on-unknown-properties: false`.
+- `spring-boot-webmvc-test` — `@WebMvcTest` moved to
+  `org.springframework.boot.webmvc.test.autoconfigure` and is no longer pulled in by
+  `spring-boot-starter-test`.
+- `@WebMvcTest` applies only its own slice's autoconfigurations, so mugen-web's
+  auto-configured `GlobalExceptionHandler` is absent and must be `@Import`ed.
+
+Also caught by the same run: a bean with two constructors and no `@Autowired` fails
+the entire context load, not just that bean.
+
 ## Known gaps (deliberate, not yet done)
 - Nothing ships logs to Loki. Grafana has the datasource but no writer; services
   will need a Loki appender (loki-logback-appender) when logging is set up.
 - The whole stack has never been started against a live Docker daemon.
 
 ## Up next
-Phase 2 — mugen-auth service (Maven module, RS256 keypair, SQL Server + Flyway, JWT/session services, exception handling, controllers)
+Phase 2.8 — UserEventPublisher, the last open task in mugen-auth: publish
+`mugen.user.registered` after a registration. Note SSO creates accounts too —
+`OAuthService.linkOrCreate` returns `SsoUser(user, created)` precisely so that path
+publishes the same event. Then the quality-gate review over the whole service, then
+Phase 3 (gateway).
 
 ## Key decisions
 - Name: Mugen (無限)

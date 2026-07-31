@@ -102,7 +102,19 @@ for the next.
 - [x] JwtService (generateAccessToken, generateRefreshToken, parseRefreshToken)
 - [x] SessionService (open, rotate, revokeOne, revokeById, revokeAllExcept)
 - [x] AuthService (register, login, refresh, logout)
-- [ ] OAuthService (Google + GitHub provider)
+- [x] OAuthService (Google + GitHub provider)
+- **Decision:** the authorization code flow is driven explicitly, NOT via
+  `oauth2Login()`. Spring's login chain ends in an authenticated servlet session;
+  mugen has none, so a sign-in must end in the same token pair a password login
+  produces — both routes now converge on `AuthService.issueTokens`. The protocol
+  steps are still Spring Security's (token exchange, PKCE, user-info call).
+- [x] (extra) OAuthProfileMapper per provider — providers agree on the handshake
+      and almost nothing after it. GitHub needs a second call to `/user/emails`:
+      it omits private addresses from `/user` and reports verification nowhere
+      else.
+- [x] (extra) AuthorizationRequestStore — single-use `state` in Redis. No HTTP
+      session exists to hold it, and any instance behind the gateway may receive
+      the callback for a flow another instance started.
 - [x] (extra) TokenType + TokenTypeValidator — access and refresh tokens are
       otherwise indistinguishable to a verifier (same key, same issuer), so a
       refresh token would authenticate as a bearer credential
@@ -123,7 +135,12 @@ for the next.
 
 ### 2.7 Controllers
 - [x] AuthController (/register, /login, /refresh, /logout)
-- [ ] SsoController (/sso/{provider}, /sso/{provider}/callback) — with OAuthService
+- [x] SsoController (/sso/{provider}, /sso/{provider}/callback)
+- [x] (extra) SsoStateCookies — a `SameSite=Lax` nonce cookie binding the flow to
+      the browser that started it. `state` alone does not stop login CSRF: an
+      attacker can start their own sign-in, get a genuine code+state, and lure a
+      victim through the callback into the attacker's account. Lax rather than
+      Strict because the callback is a cross-site top-level navigation.
 - [x] SessionController (/sessions GET, /sessions/{id} DELETE, /sessions DELETE)
 - [x] TokenIntrospectController (/me, /validate)
 - [x] (extra) RefreshTokenCookies + RefreshCookieProperties — HttpOnly, Secure,
@@ -138,7 +155,12 @@ for the next.
 - [x] AuthFlowIntegrationTest (Testcontainers SQL Server + Redis) — full
       register/login/refresh/replay/logout flow
 - [x] SchemaIntegrationTest (Testcontainers SQL Server)
-- [ ] OAuthServiceTest (with 2.4 OAuthService)
+- [x] OAuthServiceTest (23 tests — PKCE, single-use and provider-bound state,
+      browser-nonce binding, and the linking rules that decide whether a provider
+      identity may be attached to an existing account)
+- [x] (extra) SsoControllerTest (@WebMvcTest — redirect targets and the cookie
+      attributes, which are the whole security model of the flow and are
+      invisible from a service-level test)
 
 ---
 
