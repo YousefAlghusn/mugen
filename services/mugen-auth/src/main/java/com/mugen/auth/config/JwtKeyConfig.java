@@ -1,11 +1,14 @@
 package com.mugen.auth.config;
 
+import com.mugen.auth.token.TokenType;
+import com.mugen.auth.token.TokenTypeValidator;
 import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.security.converter.RsaKeyConverters;
 import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
@@ -72,20 +75,36 @@ public class JwtKeyConfig {
     }
 
     /**
-     * Verifies tokens presented to this service's own protected endpoints
-     * ({@code /me}, {@code /validate}).
+     * Verifies access tokens presented to this service's protected endpoints
+     * ({@code /me}, {@code /validate}, session management).
      * <p>
-     * The default validator only checks timestamps. Issuer validation is added
-     * explicitly: without it, any RS256 token this key happens to verify would be
-     * accepted, including one minted by a different system that was handed the
-     * same public key.
+     * {@code @Primary} because the resource server resolves its decoder by type and
+     * there are two here. Validation beyond the default timestamp check:
+     * <ul>
+     *   <li>issuer — without it any RS256 token this key happens to verify would be
+     *       accepted, including one minted by whoever else was handed the public key;</li>
+     *   <li>token type — without it a 30-day refresh token would authenticate as a
+     *       bearer credential.</li>
+     * </ul>
      */
     @Bean
-    JwtDecoder jwtDecoder(RSAPublicKey publicKey, JwtProperties properties) {
+    @Primary
+    JwtDecoder accessTokenDecoder(RSAPublicKey publicKey, JwtProperties properties) {
+        return decoderFor(publicKey, properties, TokenType.ACCESS);
+    }
+
+    /** Used only by the refresh endpoint; rejects access tokens. */
+    @Bean
+    JwtDecoder refreshTokenDecoder(RSAPublicKey publicKey, JwtProperties properties) {
+        return decoderFor(publicKey, properties, TokenType.REFRESH);
+    }
+
+    private static JwtDecoder decoderFor(RSAPublicKey publicKey, JwtProperties properties, String tokenType) {
         NimbusJwtDecoder decoder = NimbusJwtDecoder.withPublicKey(publicKey).build();
         decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(
                 new JwtTimestampValidator(),
-                new JwtIssuerValidator(properties.issuer())));
+                new JwtIssuerValidator(properties.issuer()),
+                new TokenTypeValidator(tokenType)));
         return decoder;
     }
 }

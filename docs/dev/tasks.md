@@ -99,13 +99,16 @@ for the next.
   simplified accordingly.
 
 ### 2.4 Core services
-- [ ] JwtService (generateAccessToken, generateRefreshToken, extractClaims)
-- [ ] SessionService (create, rotate, revokeOne, revokeAllExceptCurrent)
-- [ ] AuthService (register, login)
+- [x] JwtService (generateAccessToken, generateRefreshToken, parseRefreshToken)
+- [x] SessionService (open, rotate, revokeOne, revokeById, revokeAllExcept)
+- [x] AuthService (register, login, refresh, logout)
 - [ ] OAuthService (Google + GitHub provider)
+- [x] (extra) TokenType + TokenTypeValidator — access and refresh tokens are
+      otherwise indistinguishable to a verifier (same key, same issuer), so a
+      refresh token would authenticate as a bearer credential
 
 ### 2.5 Redis revocation
-- [ ] RevocationCacheService (write on revoke, check, 15 min TTL)
+- [x] RevocationCacheService (write on revoke, check, TTL = access-token TTL)
 
 ### 2.6 Exception handling
 - [x] Exception hierarchy (AppException + ResourceNotFound / Conflict /

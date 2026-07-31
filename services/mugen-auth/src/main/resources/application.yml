@@ -112,7 +112,10 @@ mugen:
   jwt:
     private-key: ${JWT_PRIVATE_KEY_PATH:classpath:keys/private.pem}
     public-key: ${JWT_PUBLIC_KEY_PATH:classpath:keys/public.pem}
-    issuer: mugen-auth
+    # A URI, not a bare name. RFC 7519 allows either, but Spring's Jwt.getIssuer()
+    # returns a URL and throws on anything that will not parse as one — so a bare
+    # "mugen-auth" works until the first caller (the gateway) asks for the issuer.
+    issuer: https://mugen.dev/auth
     access-token-ttl: ${JWT_ACCESS_TOKEN_TTL_MINUTES:15}m
     refresh-token-ttl: ${JWT_REFRESH_TOKEN_TTL_DAYS:30}d
     revocation-cache-ttl: ${JWT_REVOCATION_CACHE_TTL_MINUTES:15}m
