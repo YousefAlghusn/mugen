@@ -172,6 +172,57 @@ for the next.
       attributes, which are the whole security model of the flow and are
       invisible from a service-level test)
 
+### 2.10 Swagger / OpenAPI
+Interactive API docs, so the service can be exercised from a browser instead of
+by hand-writing requests. Set up here, in the first service, because whatever
+shape it takes gets copied into the other ten.
+
+- [ ] **Check compatibility before anything else.** springdoc-openapi 2.x targets
+      Boot 3 / Spring Framework 6; this project is on Boot 4.1 / Framework 7 and
+      needs a release built for it. Confirm one exists and resolves from Maven
+      Central before designing around it — the same verification the Boot 4.1.0
+      and Spring Cloud 2025.1.2 pins got. If none exists yet, fall back to a
+      hand-maintained `openapi.yaml` served by Swagger UI, and record the choice.
+- [ ] Dependency + `/swagger-ui.html` and `/v3/api-docs` reachable
+- [ ] Permit both in SecurityConfig — they sit behind the gateway, but they are
+      unauthenticated by nature and must be listed deliberately, not by accident
+- [ ] Document the auth scheme so "Authorize" works: HTTP bearer, JWT format
+- [ ] Annotate the endpoints that are not self-explanatory — the SSO pair in
+      particular (a browser redirect flow, not a JSON call) and the refresh
+      cookie, which never appears in a request body
+- [ ] Decide whether it is exposed in deployed environments or dev-only
+
+### 2.11 Exit gate — Phase 3 does not start until every box here is ticked
+Not a checklist of nice-to-haves. mugen-auth is the template the other ten
+services get built from, so anything wrong here gets copied ten times.
+
+- [ ] **Actually run the service.** `docker compose up -d`, then
+      `cd services/mugen-auth && ../../mvnw spring-boot:run`. Passing tests are
+      not the same claim: Testcontainers starts its own SQL Server and Redis and
+      tears them down, so as of the pause nothing has ever run against the
+      compose stack, and `docker compose up` has never been executed at all.
+      This is the first real test of the KRaft broker, the init scripts, Eureka
+      registration and the host-vs-container address split in `.env`.
+- [ ] **Exercise every endpoint against the running service** — register, login,
+      refresh, logout, sessions list/revoke, /me, /validate. `http/auth.http`
+      (Phase 11.1) is the natural artifact; pull it forward to here.
+- [ ] **Run the SSO flow against a real Google and a real GitHub app.** It has
+      never touched a provider: token exchange and user-info are stubbed in every
+      test and the `sso` profile has never been activated, so
+      `application-sso.yml` has not even been parsed once. Needs real client
+      credentials and the callback URL registered in both consoles.
+- [ ] **Regression suite complete and green** — `./mvnw verify` with the gaps
+      closed: AuthController and SessionController have no controller-level tests,
+      TokenIntrospectController is untested, RevocationCacheService and the
+      Redis-backed AuthorizationRequestStore have no tests of their own, and the
+      Google/GitHub profile mappers are untested (GitHub's private-email fallback
+      especially — it is pure branching over a response shape).
+- [ ] **Quality review pass over the whole service** — library choices, layering,
+      error handling, DevEx, deploy story. Fix findings, do not defer them.
+- [ ] mugen-auth `Dockerfile` + `.dockerignore`, following `eureka-server/` as the
+      template (layered jar, non-root, MaxRAMPercentage). Every service owes one
+      and this is the first.
+
 ---
 
 ## PHASE 3 — API Gateway

@@ -20,17 +20,19 @@ this still does not exercise the compose stack.
   resolves `mugen-shared` from the local repo, so a stale installed jar silently
   shadows source changes. Use `-am`, or `install` the shared modules first.
 
-## Open gaps (deliberate or not yet reached)
-- **SSO has never touched a real provider.** Token exchange and user-info are
-  stubbed in every test, the `sso` profile has never been activated, so
-  `application-sso.yml` has never even been parsed, and no callback URL is
-  registered in a Google or GitHub console. Logic and persistence are proven;
-  provider integration is not. Cheapest next check: run with
-  `-Dspring-boot.run.profiles=sso` and dummy credentials, then confirm
-  `GET /api/v1/auth/sso/google` 302s to Google with the right `client_id`,
-  `state`, `code_challenge` and `redirect_uri`.
-- `docker compose up` has never been run. The KRaft broker, the eureka-server
-  image and the init scripts are all unproven.
+## Open gaps
+Everything untested about mugen-auth is now tracked as the **2.11 exit gate** in
+tasks.md, which Phase 3 must not start before. In short: the service has never been
+run, `docker compose up` has never been executed, SSO has never touched a real
+provider, and the regression suite has named holes.
+
+Cheapest first SSO check, short of registering real apps: run with
+`-Dspring-boot.run.profiles=sso` and dummy credentials, then confirm
+`GET /api/v1/auth/sso/google` 302s to Google carrying the right `client_id`,
+`state`, `code_challenge` and `redirect_uri`. That proves everything up to the
+point Google's own credential check takes over.
+
+Not on the gate, deferred by choice:
 - Nothing ships logs to Loki. Grafana has the datasource but no writer; services
   need a Loki appender (loki-logback-appender) when logging is set up.
 
@@ -43,8 +45,17 @@ this still does not exercise the compose stack.
    commit is the fork to settle first.
    Note SSO creates accounts too: `OAuthService.linkOrCreate` returns
    `SsoUser(user, created)` precisely so that path publishes the same event.
-2. Quality-gate review over the whole of mugen-auth.
-3. Phase 3 — gateway.
+2. **2.10 Swagger / OpenAPI** — set up here because the shape gets copied into the
+   other ten services. Verify a Boot 4 / Framework 7 compatible springdoc release
+   exists before designing around it; 2.x targets Boot 3.
+3. **2.11 exit gate — Phase 3 does not start until all of it is ticked.** Full list
+   in tasks.md. The three that are not yet true at all: the service has never been
+   run (`docker compose up` has never been executed), SSO has never touched a real
+   provider, and the regression suite has known holes — no controller tests for
+   AuthController / SessionController / TokenIntrospectController, none for
+   RevocationCacheService or AuthorizationRequestStore, none for the profile
+   mappers. Plus the quality review and the service's own Dockerfile.
+4. Phase 3 — gateway.
 
 ## Phase 2 — SSO design (2026-07-31)
 - The authorization code flow is driven explicitly, not through `oauth2Login()`.
