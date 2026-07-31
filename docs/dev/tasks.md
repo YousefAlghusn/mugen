@@ -146,8 +146,18 @@ for the next.
 - [x] (extra) RefreshTokenCookies + RefreshCookieProperties — HttpOnly, Secure,
       SameSite=Strict, Path=/api/v1/auth, defined in one place
 
-### 2.8 Kafka
+### 2.8 Kafka  ← NEXT
 - [ ] UserEventPublisher (publish mugen.user.registered after register)
+- **Open decision, settle before writing code:** CLAUDE.md requires the outbox
+  pattern for any Kafka publish that must be atomic with a DB write, and this is
+  one — a lost event leaves a user who exists in mugen-auth with no profile in
+  mugen-user, permanently. But outbox work is scheduled in Phase 5. Either build
+  the full outbox here (V4 migration + entity + @Scheduled poller, and Phase 5
+  reuses a proven pattern) or publish directly via
+  `@TransactionalEventListener(AFTER_COMMIT)` and accept that a crash between
+  commit and send loses the event silently.
+- Note SSO registers users too: `OAuthService.linkOrCreate` returns
+  `SsoUser(user, created)` so that path can publish the same event.
 
 ### 2.9 Tests
 - [x] JwtServiceTest (sign, verify, tampered token, expired, wrong key, type confusion)
