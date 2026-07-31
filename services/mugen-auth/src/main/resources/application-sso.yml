@@ -1,0 +1,59 @@
+# SSO provider credentials — activate with the `sso` profile.
+#
+# Kept out of application.yml on purpose. Spring Boot only builds a
+# ClientRegistrationRepository when at least one registration is configured, and it
+# rejects a registration whose client-id is blank. Putting these in the default
+# profile would therefore mean mugen-auth refuses to start on any machine without
+# Google and GitHub credentials — which is most of them, and which would break the
+# run-from-IntelliJ dev story for a feature the developer is not even working on.
+#
+# Same rule CLAUDE.md applies to the Config Server: an optional dependency being
+# absent degrades a feature, it never stops the service booting. With the profile
+# off, OAuthClientRegistry finds no repository and the /sso endpoints answer 404.
+#
+#   ../../mvnw spring-boot:run -Dspring-boot.run.profiles=sso
+#
+# The four secrets come from .env Section B and must be exported into the run
+# configuration — Spring does not read .env (CLAUDE.md, "Dev vs deploy").
+
+spring:
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: ${GOOGLE_OAUTH_CLIENT_ID}
+            client-secret: ${GOOGLE_OAUTH_CLIENT_SECRET}
+            # Absolute, and pointing at the GATEWAY, not at this service. The
+            # browser is what follows this URL, and per CLAUDE.md the gateway is the
+            # only entry point. It must also match the redirect URI registered in
+            # the Google Cloud console exactly, character for character.
+            #
+            # Note this is NOT Spring's "{baseUrl}/login/oauth2/code/google"
+            # default: that template is resolved by the oauth2Login() filter chain,
+            # which this flow deliberately does not use. OAuthService rejects a
+            # templated value at startup of the flow rather than sending it to the
+            # provider literally.
+            redirect-uri: ${MUGEN_SSO_CALLBACK_BASE_URL:http://localhost:8080}/api/v1/auth/sso/google/callback
+            # openid+email+profile is the minimum that yields sub, email and
+            # email_verified. No offline access: mugen never acts on the user's
+            # behalf at Google, so a refresh token there would be a stored
+            # credential with no purpose and real breach value.
+            scope:
+              - openid
+              - email
+              - profile
+
+          github:
+            client-id: ${GITHUB_OAUTH_CLIENT_ID}
+            client-secret: ${GITHUB_OAUTH_CLIENT_SECRET}
+            redirect-uri: ${MUGEN_SSO_CALLBACK_BASE_URL:http://localhost:8080}/api/v1/auth/sso/github/callback
+            # user:email is not optional here. GitHub omits the address from /user
+            # whenever the account keeps it private — the default for a large share
+            # of accounts — and it is the only endpoint that reports whether an
+            # address is verified at all. Without this scope, GithubProfileMapper
+            # cannot produce a verified email and every first-time GitHub sign-in is
+            # refused by the linking rules.
+            scope:
+              - read:user
+              - user:email

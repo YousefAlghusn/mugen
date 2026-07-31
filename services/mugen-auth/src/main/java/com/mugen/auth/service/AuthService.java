@@ -61,7 +61,7 @@ public class AuthService {
         }
 
         log.info("Registered user {}", user.getId());
-        return issueFor(user, context);
+        return issueTokens(user, context);
     }
 
     /**
@@ -85,7 +85,7 @@ public class AuthService {
             throw new AuthExceptions.InvalidCredentials();
         }
 
-        return issueFor(user, context);
+        return issueTokens(user, context);
     }
 
     /**
@@ -128,7 +128,18 @@ public class AuthService {
         sessions.revokeById(claims.sessionId());
     }
 
-    private TokenPair issueFor(User user, RequestContext context) {
+    /**
+     * Opens a session for an already-authenticated user and mints its first token
+     * pair.
+     * <p>
+     * Public because {@link OAuthService} ends its flow here too. Whoever calls this
+     * has taken on the job of proving the user is who they say they are — a password
+     * check, or a completed provider handshake. Everything after that point must be
+     * identical for both, or the two sign-in routes would drift into producing
+     * differently-shaped sessions.
+     */
+    @Transactional
+    public TokenPair issueTokens(User user, RequestContext context) {
         Session session = sessions.open(user, context.userAgent(), context.ipAddress());
         return new TokenPair(
                 jwt.generateAccessToken(user, session.getId()),

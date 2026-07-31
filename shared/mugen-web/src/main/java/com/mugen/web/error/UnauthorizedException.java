@@ -19,4 +19,13 @@ public class UnauthorizedException extends AppException {
     public UnauthorizedException(String message) {
         super(ErrorCode.INVALID_CREDENTIALS, HttpStatus.UNAUTHORIZED, message);
     }
+
+    /**
+     * Keeps the underlying failure for the logs while the client still sees only
+     * {@code message}. Used where the real reason is a third party's response, which
+     * must never be echoed back.
+     */
+    public UnauthorizedException(ErrorCode errorCode, String message, Throwable cause) {
+        super(errorCode, HttpStatus.UNAUTHORIZED, message, cause);
+    }
 }

@@ -16,6 +16,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -58,7 +59,7 @@ public class AuthController {
     public ResponseEntity<AuthResponse> refresh(
             @CookieValue(name = "${mugen.auth.refresh-cookie.name}", required = false) String refreshToken) {
 
-        if (refreshToken == null || refreshToken.isBlank()) {
+        if (!StringUtils.hasText(refreshToken)) {
             throw new AuthExceptions.TokenInvalid("Refresh token is not valid.");
         }
         return respondWith(authService.refresh(refreshToken), HttpStatus.OK);
@@ -75,7 +76,7 @@ public class AuthController {
     public ResponseEntity<Void> logout(
             @CookieValue(name = "${mugen.auth.refresh-cookie.name}", required = false) String refreshToken) {
 
-        if (refreshToken != null && !refreshToken.isBlank()) {
+        if (StringUtils.hasText(refreshToken)) {
             try {
                 authService.logout(refreshToken);
             } catch (AuthExceptions.TokenInvalid | AuthExceptions.SessionNotFound ex) {
@@ -108,7 +109,7 @@ public class AuthController {
      */
     private static String clientIpOf(HttpServletRequest request) {
         String forwarded = request.getHeader("X-Forwarded-For");
-        if (forwarded != null && !forwarded.isBlank()) {
+        if (StringUtils.hasText(forwarded)) {
             // Leftmost entry is the original client; the rest are proxies.
             return forwarded.split(",")[0].trim();
         }

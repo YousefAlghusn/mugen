@@ -122,6 +122,25 @@ mugen:
       # this cookie to a cross-site request at all.
       same-site: Strict
 
+    # SSO settings that belong to us. The provider client ids and secrets are
+    # Spring Security's own spring.security.oauth2.client.* and live in
+    # application-sso.yml — activate the `sso` profile to switch SSO on. Without
+    # it these values simply go unused and the /sso endpoints answer 404.
+    sso:
+      # Only has to cover the time a human spends on a consent screen. Every extra
+      # minute is extra window in which a forged callback would still be accepted.
+      state-ttl: ${MUGEN_SSO_STATE_TTL_MINUTES:5}m
+      # Where the callback sends the browser once the cookie is set. The SPA then
+      # calls /refresh to get an access token into memory — which is why the access
+      # token never has to travel in a URL, where it would land in browser history,
+      # Referer headers and every proxy log on the way.
+      default-redirect-uri: ${MUGEN_SSO_DEFAULT_REDIRECT_URI:http://localhost:4200/auth/callback}
+      # Exact-match allowlist, not a pattern. This is the only thing standing
+      # between ?redirect_uri= and an open redirect that hands a look-alike site a
+      # freshly signed-in browser.
+      allowed-redirect-uris:
+        - ${MUGEN_SSO_DEFAULT_REDIRECT_URI:http://localhost:4200/auth/callback}
+
   jwt:
     private-key: ${JWT_PRIVATE_KEY_PATH:classpath:keys/private.pem}
     public-key: ${JWT_PUBLIC_KEY_PATH:classpath:keys/public.pem}
