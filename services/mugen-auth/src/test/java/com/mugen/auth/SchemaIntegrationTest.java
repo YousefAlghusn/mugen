@@ -1,9 +1,9 @@
 package com.mugen.auth;
 
-import com.mugen.auth.domain.OAuthLink;
-import com.mugen.auth.domain.OAuthProvider;
-import com.mugen.auth.domain.Session;
-import com.mugen.auth.domain.User;
+import com.mugen.auth.entity.OAuthLink;
+import com.mugen.auth.entity.OAuthProvider;
+import com.mugen.auth.entity.Session;
+import com.mugen.auth.entity.User;
 import com.mugen.auth.repository.OAuthLinkRepository;
 import com.mugen.auth.repository.SessionRepository;
 import com.mugen.auth.repository.UserRepository;

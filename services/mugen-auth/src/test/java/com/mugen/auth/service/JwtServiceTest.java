@@ -1,10 +1,10 @@
 package com.mugen.auth.service;
 
 import com.mugen.auth.config.JwtProperties;
-import com.mugen.auth.domain.Role;
-import com.mugen.auth.domain.User;
+import com.mugen.auth.entity.Role;
+import com.mugen.auth.entity.User;
 import com.mugen.auth.exception.AuthExceptions;
-import com.mugen.auth.token.RefreshTokenClaims;
+import com.mugen.auth.dto.RefreshTokenClaims;
 import com.mugen.auth.token.TokenType;
 import com.mugen.auth.token.TokenTypeValidator;
 import com.nimbusds.jose.jwk.JWKSet;

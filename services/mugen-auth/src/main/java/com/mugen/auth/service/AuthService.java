@@ -1,12 +1,13 @@
 package com.mugen.auth.service;
 
 import com.mugen.auth.config.JwtProperties;
-import com.mugen.auth.domain.Session;
-import com.mugen.auth.domain.User;
+import com.mugen.auth.dto.RefreshTokenClaims;
+import com.mugen.auth.dto.RequestContext;
+import com.mugen.auth.dto.TokenPair;
+import com.mugen.auth.entity.Session;
+import com.mugen.auth.entity.User;
 import com.mugen.auth.exception.AuthExceptions;
 import com.mugen.auth.repository.UserRepository;
-import com.mugen.auth.token.RefreshTokenClaims;
-import com.mugen.auth.token.TokenPair;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -94,7 +95,12 @@ public class AuthService {
      * token, so a role granted or revoked mid-session takes effect here instead of
      * being frozen in for the token's remaining lifetime.
      */
-    @Transactional
+    // noRollbackFor must be repeated here, not only on SessionService.rotate.
+    // rotate() joins this transaction rather than starting its own, so when
+    // SessionReplayDetected propagates out, this outer boundary applies its own
+    // rollback rules — and the default would discard the revocation that rotate()
+    // just wrote. Both levels have to agree for the security side effect to commit.
+    @Transactional(noRollbackFor = AuthExceptions.SessionReplayDetected.class)
     public TokenPair refresh(String refreshToken) {
         RefreshTokenClaims claims = jwt.parseRefreshToken(refreshToken);
 

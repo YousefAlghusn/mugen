@@ -122,18 +122,23 @@ for the next.
   or override the bean.
 
 ### 2.7 Controllers
-- [ ] AuthController (/register, /login, /refresh, /logout)
-- [ ] SsoController (/sso/{provider}, /sso/{provider}/callback)
-- [ ] SessionController (/sessions GET, /sessions/{id} DELETE, /sessions DELETE)
-- [ ] TokenIntrospectController (/me, /validate)
+- [x] AuthController (/register, /login, /refresh, /logout)
+- [ ] SsoController (/sso/{provider}, /sso/{provider}/callback) — with OAuthService
+- [x] SessionController (/sessions GET, /sessions/{id} DELETE, /sessions DELETE)
+- [x] TokenIntrospectController (/me, /validate)
+- [x] (extra) RefreshTokenCookies + RefreshCookieProperties — HttpOnly, Secure,
+      SameSite=Strict, Path=/api/v1/auth, defined in one place
 
 ### 2.8 Kafka
 - [ ] UserEventPublisher (publish mugen.user.registered after register)
 
 ### 2.9 Tests
-- [ ] JwtServiceTest (sign, verify, tampered token, expired)
-- [ ] SessionServiceTest (rotation, replay attack detection)
-- [ ] AuthControllerIntegrationTest (Testcontainers SQL Server)
+- [x] JwtServiceTest (sign, verify, tampered token, expired, wrong key, type confusion)
+- [x] SessionServiceTest (rotation, replay attack detection)
+- [x] AuthFlowIntegrationTest (Testcontainers SQL Server + Redis) — full
+      register/login/refresh/replay/logout flow
+- [x] SchemaIntegrationTest (Testcontainers SQL Server)
+- [ ] OAuthServiceTest (with 2.4 OAuthService)
 
 ---
 

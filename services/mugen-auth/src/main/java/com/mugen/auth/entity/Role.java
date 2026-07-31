@@ -1,4 +1,4 @@
-package com.mugen.auth.domain;
+package com.mugen.auth.entity;
 
 /**
  * Role names as stored in {@code user_roles.role} and carried in the access

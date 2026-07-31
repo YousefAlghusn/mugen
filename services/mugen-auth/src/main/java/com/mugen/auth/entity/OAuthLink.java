@@ -1,4 +1,4 @@
-package com.mugen.auth.domain;
+package com.mugen.auth.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

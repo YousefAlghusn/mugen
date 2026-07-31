@@ -1,7 +1,7 @@
 package com.mugen.auth.repository;
 
-import com.mugen.auth.domain.OAuthLink;
-import com.mugen.auth.domain.OAuthProvider;
+import com.mugen.auth.entity.OAuthLink;
+import com.mugen.auth.entity.OAuthProvider;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;

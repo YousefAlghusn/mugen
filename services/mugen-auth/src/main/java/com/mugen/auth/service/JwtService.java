@@ -1,9 +1,9 @@
 package com.mugen.auth.service;
 
 import com.mugen.auth.config.JwtProperties;
-import com.mugen.auth.domain.User;
+import com.mugen.auth.entity.User;
 import com.mugen.auth.exception.AuthExceptions;
-import com.mugen.auth.token.RefreshTokenClaims;
+import com.mugen.auth.dto.RefreshTokenClaims;
 import com.mugen.auth.token.TokenType;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -65,7 +65,7 @@ public class JwtService {
 
     /**
      * Refresh token: 30 days, carries only {@code {sessionId, version}}. The version
-     * is what makes replay detectable — see {@link com.mugen.auth.domain.Session#rotate()}.
+     * is what makes replay detectable — see {@link com.mugen.auth.entity.Session#rotate()}.
      */
     public String generateRefreshToken(UUID sessionId, int version) {
         Instant now = Instant.now();

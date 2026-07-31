@@ -1,4 +1,4 @@
-package com.mugen.auth.domain;
+package com.mugen.auth.entity;
 
 /**
  * External identity providers this service accepts.

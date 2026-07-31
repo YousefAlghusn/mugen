@@ -109,6 +109,19 @@ eureka:
 # with zero DB calls.
 # ---------------------------------------------------------------------------
 mugen:
+  auth:
+    refresh-cookie:
+      name: mugen_refresh
+      # Scoped to the auth endpoints only. The browser then never attaches this
+      # cookie to any other call, so it cannot leak through an unrelated request.
+      path: /api/v1/auth
+      # Overridable only for a plain-HTTP local setup. Must be true anywhere real.
+      # Modern browsers treat localhost as a secure origin, so true works in dev too.
+      secure: ${MUGEN_REFRESH_COOKIE_SECURE:true}
+      # Strict is what makes disabling CSRF defensible: the browser will not attach
+      # this cookie to a cross-site request at all.
+      same-site: Strict
+
   jwt:
     private-key: ${JWT_PRIVATE_KEY_PATH:classpath:keys/private.pem}
     public-key: ${JWT_PUBLIC_KEY_PATH:classpath:keys/public.pem}

@@ -1,8 +1,8 @@
 package com.mugen.auth.service;
 
 import com.mugen.auth.config.JwtProperties;
-import com.mugen.auth.domain.Session;
-import com.mugen.auth.domain.User;
+import com.mugen.auth.entity.Session;
+import com.mugen.auth.entity.User;
 import com.mugen.auth.exception.AuthExceptions;
 import com.mugen.auth.repository.SessionRepository;
 import org.junit.jupiter.api.BeforeEach;

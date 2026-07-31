@@ -1,4 +1,4 @@
-package com.mugen.auth.service;
+package com.mugen.auth.dto;
 
 /**
  * Where a login came from, recorded on the session so a user can recognise their

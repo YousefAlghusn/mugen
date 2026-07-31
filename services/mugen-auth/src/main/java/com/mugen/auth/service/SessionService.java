@@ -1,8 +1,8 @@
 package com.mugen.auth.service;
 
 import com.mugen.auth.config.JwtProperties;
-import com.mugen.auth.domain.Session;
-import com.mugen.auth.domain.User;
+import com.mugen.auth.entity.Session;
+import com.mugen.auth.entity.User;
 import com.mugen.auth.exception.AuthExceptions;
 import com.mugen.auth.repository.SessionRepository;
 import lombok.RequiredArgsConstructor;
@@ -56,7 +56,13 @@ public class SessionService {
      *
      * @return the session, with {@code tokenVersion} already advanced
      */
-    @Transactional
+    // noRollbackFor is load-bearing, not a tidy-up. Throwing SessionReplayDetected
+    // marks the transaction for rollback, which would undo the revocation this
+    // method just performed — leaving the session live in the database while Redis
+    // (non-transactional) already reported it revoked. The attacker's stolen token
+    // would keep working until the Redis key expired 15 minutes later. The
+    // revocation is a deliberate security side effect and must outlive the throw.
+    @Transactional(noRollbackFor = AuthExceptions.SessionReplayDetected.class)
     public Session rotate(UUID sessionId, int presentedVersion) {
         Session session = sessions.findForRotation(sessionId)
                 .orElseThrow(AuthExceptions.SessionNotFound::new);

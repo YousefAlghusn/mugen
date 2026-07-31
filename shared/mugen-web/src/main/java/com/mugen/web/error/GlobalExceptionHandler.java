@@ -3,6 +3,8 @@ package com.mugen.web.error;
 import com.mugen.shared.error.ErrorCode;
 import com.mugen.shared.trace.TraceIdHolder;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
@@ -27,6 +29,12 @@ import java.util.List;
  */
 @Slf4j
 @RestControllerAdvice
+// Must outrank Spring Boot's own ProblemDetailsExceptionHandler, which
+// spring.mvc.problemdetails.enabled registers as a @ControllerAdvice at order 0.
+// Without this, Boot's handler claims MethodArgumentNotValidException first and
+// answers with a bare ProblemDetail — no traceId, no code, no errors[] — for
+// exactly the validation failures clients most need those fields on.
+@Order(Ordered.HIGHEST_PRECEDENCE)
 public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     /** Namespace for the {@code type} URI. Stable, dereferenceable documentation ids. */

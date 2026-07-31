@@ -1,4 +1,4 @@
-package com.mugen.auth.token;
+package com.mugen.auth.dto;
 
 import java.time.Duration;
 
