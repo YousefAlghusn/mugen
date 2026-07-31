@@ -87,20 +87,17 @@
             <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
         </dependency>
 
-        <!-- ================================== JWT =================================== -->
+        <!-- ================================== JWT ===================================
+             Spring Security's own JOSE support (Nimbus underneath) rather than a
+             standalone JWT library. It provides JwtEncoder for signing here, and
+             the same artifact gives mugen-gateway a one-line JwtDecoder — so sign
+             and verify share one implementation and one set of validation rules
+             instead of two libraries that must be kept agreeing with each other.
+             It also makes /me and /validate a plain resource server rather than a
+             hand-written verification filter. -->
         <dependency>
-            <groupId>io.jsonwebtoken</groupId>
-            <artifactId>jjwt-api</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>io.jsonwebtoken</groupId>
-            <artifactId>jjwt-impl</artifactId>
-            <scope>runtime</scope>
-        </dependency>
-        <dependency>
-            <groupId>io.jsonwebtoken</groupId>
-            <artifactId>jjwt-jackson</artifactId>
-            <scope>runtime</scope>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
         </dependency>
 
         <!-- ============================ Shared contracts ============================ -->

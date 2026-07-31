@@ -86,9 +86,17 @@ for the next.
       caught the two Boot 4 issues below.
 
 ### 2.3 Security config
-- [ ] JwkKeyConfig (load RSA keypair as beans)
-- [ ] PasswordConfig (BCryptPasswordEncoder bean)
-- [ ] SecurityConfig (filter chain, public routes)
+- [x] JwtKeyConfig (RSA keypair + Nimbus JwtEncoder/JwtDecoder beans)
+- [x] JwtProperties (validated @ConfigurationProperties for mugen.jwt.*)
+- [x] PasswordConfig (delegating encoder, not bare Bcrypt — stores `{bcrypt}`
+      prefix so the algorithm can be changed without a mass password reset)
+- [x] SecurityConfig (stateless filter chain, public routes, roles-claim
+      authority converter)
+- **Decision:** JWT handling uses Spring Security's JOSE support (Nimbus), NOT
+  JJWT as originally written above. One implementation signs in mugen-auth and
+  verifies in mugen-gateway; /me and /validate become a plain resource server
+  instead of a hand-written filter. Phase 3.3's JwtVerificationFilter is
+  simplified accordingly.
 
 ### 2.4 Core services
 - [ ] JwtService (generateAccessToken, generateRefreshToken, extractClaims)
