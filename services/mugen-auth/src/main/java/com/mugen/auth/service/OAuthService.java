@@ -37,6 +37,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.Base64;
 import java.util.Locale;
 import java.util.Optional;
@@ -80,42 +82,63 @@ public class OAuthService {
     private final SsoProperties properties;
 
     /**
-     * Starts a sign-in: mints {@code state} and a PKCE verifier, remembers them, and
-     * returns the provider URL to send the browser to.
+     * Starts a sign-in: mints {@code state}, a PKCE verifier and a browser nonce,
+     * remembers them, and returns the provider URL to send the browser to.
      *
      * @param requestedRedirectUri where to land afterwards; must be on the allowlist
+     * @return the provider URL, and the nonce the caller must put in a cookie
      */
-    public URI begin(OAuthProvider provider, String requestedRedirectUri) {
+    public SsoRedirect begin(OAuthProvider provider, String requestedRedirectUri) {
         ClientRegistration registration = registry.registrationFor(provider);
         String redirectUri = properties.resolveRedirectUri(requestedRedirectUri);
         String state = STATE_GENERATOR.generateKey();
+        String browserNonce = STATE_GENERATOR.generateKey();
 
         OAuth2AuthorizationRequest request = authorizationRequest(registration, state, null);
 
         pendingAuthorizations.save(state, new PendingAuthorization(
                 provider,
                 request.getAttribute(PkceParameterNames.CODE_VERIFIER),
-                redirectUri));
+                redirectUri,
+                browserNonce));
 
         log.debug("Starting {} SSO, state {}", provider, state);
-        return URI.create(request.getAuthorizationRequestUri());
+        return new SsoRedirect(URI.create(request.getAuthorizationRequestUri()), browserNonce);
     }
 
     /**
-     * Redeems the {@code state} from a callback, single-use.
+     * Redeems the {@code state} from a callback, single-use, and checks it against
+     * the browser that started the flow.
      * <p>
      * Separate from {@link #complete} because the caller needs the redirect target
      * out of it before anything else can go wrong — a failure after this point is
      * still shown to the user on their own site rather than as a bare error page.
      *
-     * @throws AuthExceptions.SsoStateInvalid if it is missing, expired, already used
-     *         or was never issued
+     * @param browserNonce from the SSO cookie; the flow was issued to whoever holds it
+     * @throws AuthExceptions.SsoStateInvalid if the state is missing, expired,
+     *         already used, never issued, or belongs to a different browser
      */
-    public PendingAuthorization consumeState(String state) {
+    public PendingAuthorization consumeState(String state, String browserNonce) {
         if (!StringUtils.hasText(state)) {
             throw new AuthExceptions.SsoStateInvalid();
         }
-        return pendingAuthorizations.consume(state).orElseThrow(AuthExceptions.SsoStateInvalid::new);
+
+        PendingAuthorization pending = pendingAuthorizations.consume(state)
+                .orElseThrow(AuthExceptions.SsoStateInvalid::new);
+
+        // Constant-time, because this compares a secret the caller supplies against
+        // one we hold — the shape of comparison that leaks through timing.
+        if (!StringUtils.hasText(browserNonce)
+                || !MessageDigest.isEqual(
+                        browserNonce.getBytes(StandardCharsets.UTF_8),
+                        pending.browserNonce().getBytes(StandardCharsets.UTF_8))) {
+
+            log.warn("SSO callback for state {} arrived without the browser nonce it was issued to — "
+                    + "possible login CSRF", state);
+            throw new AuthExceptions.SsoStateInvalid();
+        }
+
+        return pending;
     }
 
     /**
@@ -347,6 +370,15 @@ public class OAuthService {
     /** Same canonical form {@link AuthService} stores, or the match would miss. */
     private static String normalise(String email) {
         return email == null ? null : email.trim().toLowerCase(Locale.ROOT);
+    }
+
+    /**
+     * @param authorizationUri where to send the browser
+     * @param browserNonce     must be set as a {@code SameSite=Lax} cookie on the
+     *                         same response, and is what the callback checks the
+     *                         flow back against
+     */
+    public record SsoRedirect(URI authorizationUri, String browserNonce) {
     }
 
     /**

@@ -19,10 +19,20 @@ import com.mugen.auth.entity.OAuthProvider;
  *                    intercepted authorization code from being redeemable.
  * @param redirectUri where to send the browser afterwards, already checked against
  *                    the allowlist when the flow started.
+ * @param browserNonce ties this flow to the browser that started it. The matching
+ *                    value goes out in a {@code SameSite=Lax} cookie, so a callback
+ *                    is only honoured for the browser the redirect was issued to.
+ *                    Without it the flow is open to login CSRF: an attacker starts
+ *                    a sign-in, obtains a valid {@code code} and {@code state} for
+ *                    their <em>own</em> provider account, then lures a victim
+ *                    through the callback — silently signing the victim into the
+ *                    attacker's account, where everything they then do is visible
+ *                    to the attacker.
  */
 public record PendingAuthorization(
         OAuthProvider provider,
         String codeVerifier,
-        String redirectUri
+        String redirectUri,
+        String browserNonce
 ) {
 }

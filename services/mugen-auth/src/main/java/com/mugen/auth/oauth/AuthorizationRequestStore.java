@@ -34,6 +34,7 @@ public class AuthorizationRequestStore {
     private static final String FIELD_PROVIDER = "provider";
     private static final String FIELD_CODE_VERIFIER = "codeVerifier";
     private static final String FIELD_REDIRECT_URI = "redirectUri";
+    private static final String FIELD_BROWSER_NONCE = "browserNonce";
 
     private final StringRedisTemplate redis;
     private final SsoProperties properties;
@@ -43,6 +44,7 @@ public class AuthorizationRequestStore {
         fields.put(FIELD_PROVIDER, pending.provider().name());
         fields.put(FIELD_CODE_VERIFIER, pending.codeVerifier());
         fields.put(FIELD_REDIRECT_URI, pending.redirectUri());
+        fields.put(FIELD_BROWSER_NONCE, pending.browserNonce());
 
         String key = key(state);
         redis.opsForHash().putAll(key, fields);
@@ -74,7 +76,8 @@ public class AuthorizationRequestStore {
         return Optional.of(new PendingAuthorization(
                 OAuthProvider.valueOf(field(stored, FIELD_PROVIDER)),
                 field(stored, FIELD_CODE_VERIFIER),
-                field(stored, FIELD_REDIRECT_URI)));
+                field(stored, FIELD_REDIRECT_URI),
+                field(stored, FIELD_BROWSER_NONCE)));
     }
 
     private static String field(Map<Object, Object> stored, String name) {

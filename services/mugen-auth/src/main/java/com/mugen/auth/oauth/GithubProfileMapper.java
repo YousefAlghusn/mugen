@@ -2,6 +2,7 @@ package com.mugen.auth.oauth;
 
 import com.mugen.auth.entity.OAuthProvider;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.security.oauth2.core.OAuth2AccessToken;
 import org.springframework.security.oauth2.core.user.OAuth2User;
@@ -34,6 +35,10 @@ public class GithubProfileMapper implements OAuthProfileMapper {
     private final RestClient restClient;
     private final String emailsUri;
 
+    // Explicit, because the test constructor below makes this an ambiguous choice:
+    // with two constructors and neither marked, Spring falls back to looking for a
+    // no-arg one and fails to instantiate the bean at all.
+    @Autowired
     public GithubProfileMapper(RestClient.Builder restClientBuilder) {
         this(restClientBuilder, DEFAULT_EMAILS_URI);
     }

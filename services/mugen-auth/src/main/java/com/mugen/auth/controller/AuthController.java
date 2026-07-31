@@ -3,7 +3,6 @@ package com.mugen.auth.controller;
 import com.mugen.auth.config.RefreshCookieProperties;
 import com.mugen.auth.exception.AuthExceptions;
 import com.mugen.auth.service.AuthService;
-import com.mugen.auth.dto.RequestContext;
 import com.mugen.auth.dto.TokenPair;
 import com.mugen.auth.dto.AuthResponse;
 import com.mugen.auth.dto.LoginRequest;
@@ -37,7 +36,7 @@ public class AuthController {
     public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request,
                                                  HttpServletRequest httpRequest) {
         TokenPair tokens = authService.register(
-                request.username(), request.email(), request.password(), contextOf(httpRequest));
+                request.username(), request.email(), request.password(), RequestContexts.of(httpRequest));
 
         return respondWith(tokens, HttpStatus.CREATED);
     }
@@ -45,7 +44,7 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request,
                                               HttpServletRequest httpRequest) {
-        TokenPair tokens = authService.login(request.email(), request.password(), contextOf(httpRequest));
+        TokenPair tokens = authService.login(request.email(), request.password(), RequestContexts.of(httpRequest));
 
         return respondWith(tokens, HttpStatus.OK);
     }
@@ -95,24 +94,5 @@ public class AuthController {
         return ResponseEntity.status(status)
                 .header(HttpHeaders.SET_COOKIE, cookie.toString())
                 .body(AuthResponse.bearer(tokens.accessToken(), tokens.accessTokenTtl().toSeconds()));
-    }
-
-    private static RequestContext contextOf(HttpServletRequest request) {
-        return new RequestContext(request.getHeader(HttpHeaders.USER_AGENT), clientIpOf(request));
-    }
-
-    /**
-     * Trusts {@code X-Forwarded-For} because the gateway is the only way in
-     * (CLAUDE.md architecture rules) and it sets the header. If this service were
-     * ever exposed directly the value would be caller-controlled and this would
-     * need to become a trusted-proxy check.
-     */
-    private static String clientIpOf(HttpServletRequest request) {
-        String forwarded = request.getHeader("X-Forwarded-For");
-        if (StringUtils.hasText(forwarded)) {
-            // Leftmost entry is the original client; the rest are proxies.
-            return forwarded.split(",")[0].trim();
-        }
-        return request.getRemoteAddr();
     }
 }

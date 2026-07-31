@@ -137,7 +137,7 @@ class OAuthServiceTest {
         @Test
         @DisplayName("sends the browser to the provider with state and a PKCE challenge")
         void buildsAuthorizationUrl() {
-            URI authorizationUri = oauthService.begin(OAuthProvider.GOOGLE, FRONTEND);
+            URI authorizationUri = oauthService.begin(OAuthProvider.GOOGLE, FRONTEND).authorizationUri();
 
             assertThat(authorizationUri.toString())
                     .startsWith("https://accounts.google.com/o/oauth2/v2/auth")
@@ -152,7 +152,7 @@ class OAuthServiceTest {
         @Test
         @DisplayName("keeps the code verifier server-side, never in the redirect")
         void storesVerifierOutOfBand() {
-            URI authorizationUri = oauthService.begin(OAuthProvider.GOOGLE, null);
+            OAuthService.SsoRedirect redirect = oauthService.begin(OAuthProvider.GOOGLE, null);
 
             ArgumentCaptor<PendingAuthorization> stored = ArgumentCaptor.forClass(PendingAuthorization.class);
             verify(pendingAuthorizations).save(any(), stored.capture());
@@ -164,7 +164,20 @@ class OAuthServiceTest {
 
             // The whole point of PKCE: the secret must not be observable to anyone
             // who can see the URL the browser was sent to.
-            assertThat(authorizationUri.toString()).doesNotContain(pending.codeVerifier());
+            assertThat(redirect.authorizationUri().toString()).doesNotContain(pending.codeVerifier());
+        }
+
+        @Test
+        @DisplayName("issues a browser nonce, and does not send it to the provider either")
+        void issuesBrowserNonce() {
+            OAuthService.SsoRedirect redirect = oauthService.begin(OAuthProvider.GOOGLE, FRONTEND);
+
+            ArgumentCaptor<PendingAuthorization> stored = ArgumentCaptor.forClass(PendingAuthorization.class);
+            verify(pendingAuthorizations).save(any(), stored.capture());
+
+            assertThat(redirect.browserNonce()).isNotBlank();
+            assertThat(stored.getValue().browserNonce()).isEqualTo(redirect.browserNonce());
+            assertThat(redirect.authorizationUri().toString()).doesNotContain(redirect.browserNonce());
         }
 
         @Test
@@ -199,17 +212,53 @@ class OAuthServiceTest {
         void unknownStateRejected() {
             when(pendingAuthorizations.consume("nope")).thenReturn(Optional.empty());
 
-            assertThatThrownBy(() -> oauthService.consumeState("nope"))
+            assertThatThrownBy(() -> oauthService.consumeState("nope", "nonce"))
                     .isInstanceOf(AuthExceptions.SsoStateInvalid.class);
         }
 
         @Test
         @DisplayName("a missing state is refused without reaching Redis")
         void blankStateRejected() {
-            assertThatThrownBy(() -> oauthService.consumeState("  "))
+            assertThatThrownBy(() -> oauthService.consumeState("  ", "nonce"))
                     .isInstanceOf(AuthExceptions.SsoStateInvalid.class);
 
             verify(pendingAuthorizations, never()).consume(any());
+        }
+
+        @Test
+        @DisplayName("a valid state from the wrong browser is refused — this is login CSRF")
+        void mismatchedBrowserNonceRejected() {
+            when(pendingAuthorizations.consume("state"))
+                    .thenReturn(Optional.of(new PendingAuthorization(
+                            OAuthProvider.GOOGLE, "verifier", FRONTEND, "issued-to-this-browser")));
+
+            // The attacker holds a genuine code and state from their own sign-in and
+            // has lured the victim's browser through the callback. The victim's
+            // browser never received the nonce, so the flow stops here rather than
+            // signing them into the attacker's account.
+            assertThatThrownBy(() -> oauthService.consumeState("state", "some-other-browser"))
+                    .isInstanceOf(AuthExceptions.SsoStateInvalid.class);
+        }
+
+        @Test
+        @DisplayName("a callback with no SSO cookie at all is refused")
+        void missingBrowserNonceRejected() {
+            when(pendingAuthorizations.consume("state"))
+                    .thenReturn(Optional.of(new PendingAuthorization(
+                            OAuthProvider.GOOGLE, "verifier", FRONTEND, "issued-to-this-browser")));
+
+            assertThatThrownBy(() -> oauthService.consumeState("state", null))
+                    .isInstanceOf(AuthExceptions.SsoStateInvalid.class);
+        }
+
+        @Test
+        @DisplayName("the browser that started the flow is let through")
+        void matchingBrowserNonceAccepted() {
+            PendingAuthorization issued =
+                    new PendingAuthorization(OAuthProvider.GOOGLE, "verifier", FRONTEND, "nonce");
+            when(pendingAuthorizations.consume("state")).thenReturn(Optional.of(issued));
+
+            assertThat(oauthService.consumeState("state", "nonce")).isEqualTo(issued);
         }
     }
 
@@ -220,13 +269,13 @@ class OAuthServiceTest {
     class Complete {
 
         private final PendingAuthorization pending =
-                new PendingAuthorization(OAuthProvider.GOOGLE, "verifier", FRONTEND);
+                new PendingAuthorization(OAuthProvider.GOOGLE, "verifier", FRONTEND, "nonce");
 
         @Test
         @DisplayName("a state issued for another provider cannot be spent here")
         void rejectsCrossProviderState() {
             PendingAuthorization forGithub =
-                    new PendingAuthorization(OAuthProvider.GITHUB, "verifier", FRONTEND);
+                    new PendingAuthorization(OAuthProvider.GITHUB, "verifier", FRONTEND, "nonce");
 
             assertThatThrownBy(() -> oauthService.complete(
                     OAuthProvider.GOOGLE, forGithub, "code", "state", RequestContext.unknown()))

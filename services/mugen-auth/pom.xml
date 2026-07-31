@@ -36,6 +36,20 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-oauth2-client</artifactId>
         </dependency>
+        <!--
+            Same Boot 4 modularisation as spring-boot-flyway below: RestClient lives
+            in spring-web, but its autoconfiguration was split out, so without this
+            there is no RestClient.Builder bean to inject at all.
+
+            The bean, not RestClient.create(), because Boot's builder carries this
+            service's configured Jackson — including fail-on-unknown-properties:
+            false. GithubProfileMapper's response record maps three fields out of a
+            payload with more, so a default converter would reject every response.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-restclient</artifactId>
+        </dependency>
 
         <!-- ============================== Persistence =============================== -->
         <dependency>
@@ -137,6 +151,18 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!--
+            Boot 4 split the test slices per technology the same way it split
+            autoconfiguration: @WebMvcTest moved out of spring-boot-test-autoconfigure
+            into its own module and is no longer pulled in by
+            spring-boot-starter-test. Without this the annotation simply does not
+            resolve (org.springframework.boot.webmvc.test.autoconfigure).
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-webmvc-test</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
