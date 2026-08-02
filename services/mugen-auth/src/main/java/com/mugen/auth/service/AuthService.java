@@ -28,11 +28,11 @@ import java.util.Locale;
 public class AuthService {
 
     private final UserRepository users;
-    private final SessionService sessions;
-    private final JwtService jwt;
+    private final SessionService sessionService;
+    private final JwtService jwtService;
     private final PasswordEncoder passwordEncoder;
     private final JwtProperties jwtProperties;
-    private final UserEventPublisher userEvents;
+    private final UserEventPublisher userEventPublisher;
 
     /**
      * Creates an account and logs it straight in.
@@ -57,15 +57,16 @@ public class AuthService {
         try {
             user = users.saveAndFlush(user);
         } catch (DataIntegrityViolationException ex) {
-            log.debug("Registration lost the uniqueness race for {}", normalisedEmail);
+            // No identifier to log: there is no user row, and the email is PII.
+            log.debug("Registration lost the uniqueness race on the email or username index");
             throw new AuthExceptions.EmailAlreadyRegistered(normalisedEmail);
         }
 
         // In this transaction, so the account and the announcement of it commit
         // together. mugen-user builds the profile from this event.
-        userEvents.userRegistered(user);
+        userEventPublisher.userRegistered(user);
 
-        log.info("Registered user {}", user.getId());
+        log.info("Registered account userId={}", user.getId());
         return issueTokens(user, context);
     }
 
@@ -107,15 +108,15 @@ public class AuthService {
     // just wrote. Both levels have to agree for the security side effect to commit.
     @Transactional(noRollbackFor = AuthExceptions.SessionReplayDetected.class)
     public TokenPair refresh(String refreshToken) {
-        RefreshTokenClaims claims = jwt.parseRefreshToken(refreshToken);
+        RefreshTokenClaims claims = jwtService.parseRefreshToken(refreshToken);
 
-        Session session = sessions.rotate(claims.sessionId(), claims.version());
+        Session session = sessionService.rotate(claims.sessionId(), claims.version());
         User user = users.findWithRolesById(session.getUser().getId())
                 .orElseThrow(() -> new AuthExceptions.UserNotFound(session.getUser().getId()));
 
         return new TokenPair(
-                jwt.generateAccessToken(user, session.getId()),
-                jwt.generateRefreshToken(session.getId(), session.getTokenVersion()),
+                jwtService.generateAccessToken(user, session.getId()),
+                jwtService.generateRefreshToken(session.getId(), session.getTokenVersion()),
                 jwtProperties.accessTokenTtl());
     }
 
@@ -129,8 +130,8 @@ public class AuthService {
      */
     @Transactional
     public void logout(String refreshToken) {
-        RefreshTokenClaims claims = jwt.parseRefreshToken(refreshToken);
-        sessions.revokeById(claims.sessionId());
+        RefreshTokenClaims claims = jwtService.parseRefreshToken(refreshToken);
+        sessionService.revokeById(claims.sessionId());
     }
 
     /**
@@ -145,10 +146,10 @@ public class AuthService {
      */
     @Transactional
     public TokenPair issueTokens(User user, RequestContext context) {
-        Session session = sessions.open(user, context.userAgent(), context.ipAddress());
+        Session session = sessionService.open(user, context.userAgent(), context.ipAddress());
         return new TokenPair(
-                jwt.generateAccessToken(user, session.getId()),
-                jwt.generateRefreshToken(session.getId(), session.getTokenVersion()),
+                jwtService.generateAccessToken(user, session.getId()),
+                jwtService.generateRefreshToken(session.getId(), session.getTokenVersion()),
                 jwtProperties.accessTokenTtl());
     }
 

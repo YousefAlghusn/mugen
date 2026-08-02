@@ -27,12 +27,12 @@ import java.util.Map;
 @Component
 public class OAuthClientRegistry {
 
-    private final ObjectProvider<ClientRegistrationRepository> registrations;
+    private final ObjectProvider<ClientRegistrationRepository> clientRegistrations;
     private final Map<OAuthProvider, OAuthProfileMapper> mappers = new EnumMap<>(OAuthProvider.class);
 
-    public OAuthClientRegistry(ObjectProvider<ClientRegistrationRepository> registrations,
+    public OAuthClientRegistry(ObjectProvider<ClientRegistrationRepository> clientRegistrations,
                                List<OAuthProfileMapper> profileMappers) {
-        this.registrations = registrations;
+        this.clientRegistrations = clientRegistrations;
         profileMappers.forEach(mapper -> this.mappers.put(mapper.provider(), mapper));
     }
 
@@ -43,7 +43,7 @@ public class OAuthClientRegistry {
      *         simply not on offer here.
      */
     public ClientRegistration registrationFor(OAuthProvider provider) {
-        ClientRegistrationRepository repository = registrations.getIfAvailable();
+        ClientRegistrationRepository repository = clientRegistrations.getIfAvailable();
         if (repository == null) {
             throw new AuthExceptions.SsoProviderNotConfigured(provider.name());
         }

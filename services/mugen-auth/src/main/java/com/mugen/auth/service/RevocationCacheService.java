@@ -33,11 +33,11 @@ public class RevocationCacheService {
     private static final String KEY_PREFIX = "mugen:auth:revoked-session:";
 
     private final StringRedisTemplate redis;
-    private final JwtProperties properties;
+    private final JwtProperties jwtProperties;
 
     public void revoke(UUID sessionId) {
-        redis.opsForValue().set(key(sessionId), "1", properties.revocationCacheTtl());
-        log.debug("Session {} marked revoked for {}", sessionId, properties.revocationCacheTtl());
+        redis.opsForValue().set(key(sessionId), "1", jwtProperties.revocationCacheTtl());
+        log.debug("Marked session revoked sessionId={} ttl={}", sessionId, jwtProperties.revocationCacheTtl());
     }
 
     public void revokeAll(Iterable<UUID> sessionIds) {

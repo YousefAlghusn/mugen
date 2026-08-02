@@ -30,16 +30,16 @@ import java.util.UUID;
 @Service
 public class JwtService {
 
-    private final JwtEncoder encoder;
+    private final JwtEncoder jwtEncoder;
     private final JwtDecoder refreshTokenDecoder;
-    private final JwtProperties properties;
+    private final JwtProperties jwtProperties;
 
-    public JwtService(JwtEncoder encoder,
+    public JwtService(JwtEncoder jwtEncoder,
                       @Qualifier("refreshTokenDecoder") JwtDecoder refreshTokenDecoder,
-                      JwtProperties properties) {
-        this.encoder = encoder;
+                      JwtProperties jwtProperties) {
+        this.jwtEncoder = jwtEncoder;
         this.refreshTokenDecoder = refreshTokenDecoder;
-        this.properties = properties;
+        this.jwtProperties = jwtProperties;
     }
 
     /**
@@ -51,9 +51,9 @@ public class JwtService {
         Instant now = Instant.now();
 
         JwtClaimsSet claims = JwtClaimsSet.builder()
-                .issuer(properties.issuer())
+                .issuer(jwtProperties.issuer())
                 .issuedAt(now)
-                .expiresAt(now.plus(properties.accessTokenTtl()))
+                .expiresAt(now.plus(jwtProperties.accessTokenTtl()))
                 .subject(user.getId().toString())
                 .claim(TokenType.CLAIM, TokenType.ACCESS)
                 .claim("sessionId", sessionId.toString())
@@ -71,9 +71,9 @@ public class JwtService {
         Instant now = Instant.now();
 
         JwtClaimsSet claims = JwtClaimsSet.builder()
-                .issuer(properties.issuer())
+                .issuer(jwtProperties.issuer())
                 .issuedAt(now)
-                .expiresAt(now.plus(properties.refreshTokenTtl()))
+                .expiresAt(now.plus(jwtProperties.refreshTokenTtl()))
                 .subject(sessionId.toString())
                 .claim(TokenType.CLAIM, TokenType.REFRESH)
                 .claim("sessionId", sessionId.toString())
@@ -105,6 +105,6 @@ public class JwtService {
 
     private String encode(JwtClaimsSet claims) {
         JwsHeader header = JwsHeader.with(SignatureAlgorithm.RS256).build();
-        return encoder.encode(JwtEncoderParameters.from(header, claims)).getTokenValue();
+        return jwtEncoder.encode(JwtEncoderParameters.from(header, claims)).getTokenValue();
     }
 }

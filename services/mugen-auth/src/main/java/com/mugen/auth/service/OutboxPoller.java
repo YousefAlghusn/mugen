@@ -31,9 +31,9 @@ import java.util.concurrent.TimeUnit;
 @ConditionalOnProperty(name = "mugen.outbox.enabled", havingValue = "true", matchIfMissing = true)
 public class OutboxPoller {
 
-    private final OutboxEventRepository outbox;
+    private final OutboxEventRepository outboxEvents;
     private final KafkaTemplate<String, String> kafka;
-    private final OutboxProperties properties;
+    private final OutboxProperties outboxProperties;
 
     /**
      * Claims one batch, publishes it, and marks the results.
@@ -53,7 +53,7 @@ public class OutboxPoller {
             fixedDelayString = "${mugen.outbox.poll-interval}")
     @Transactional
     public void publishPending() {
-        List<OutboxEvent> batch = outbox.claimBatch(properties.batchSize());
+        List<OutboxEvent> batch = outboxEvents.claimBatch(outboxProperties.batchSize());
         if (batch.isEmpty()) {
             return;
         }
@@ -74,7 +74,7 @@ public class OutboxPoller {
         }
 
         // Marks are flushed by the commit; the locks are released with it.
-        log.debug("Outbox: published {} of {} claimed", published, batch.size());
+        log.debug("Published {} of {} claimed outbox events", published, batch.size());
     }
 
     /**
@@ -86,9 +86,9 @@ public class OutboxPoller {
             fixedDelayString = "${mugen.outbox.purge-interval}")
     @Transactional
     public void purgePublished() {
-        int deleted = outbox.deletePublishedBefore(Instant.now().minus(properties.retention()));
+        int deleted = outboxEvents.deletePublishedBefore(Instant.now().minus(outboxProperties.retention()));
         if (deleted > 0) {
-            log.info("Outbox: purged {} published events older than {}", deleted, properties.retention());
+            log.info("Purged {} published outbox events older than {}", deleted, outboxProperties.retention());
         }
     }
 
@@ -97,7 +97,7 @@ public class OutboxPoller {
      */
     private boolean awaitAcknowledgement(OutboxEvent event, CompletableFuture<?> send) {
         try {
-            send.get(properties.sendTimeout().toMillis(), TimeUnit.MILLISECONDS);
+            send.get(outboxProperties.sendTimeout().toMillis(), TimeUnit.MILLISECONDS);
             event.markPublished();
             return true;
 
@@ -105,20 +105,20 @@ public class OutboxPoller {
             // Shutdown. Restore the flag and leave the row pending — the next run,
             // in this instance or another, will claim it again.
             Thread.currentThread().interrupt();
-            event.recordFailure("interrupted", properties.initialBackoff(), properties.maxBackoff());
+            event.recordFailure("interrupted", outboxProperties.initialBackoff(), outboxProperties.maxBackoff());
             return false;
 
         } catch (Exception ex) {
             // Never rethrown: one unpublishable event must not abort the batch and
             // roll back the rows that did go out, or a single poison message would
             // wedge the whole outbox behind it.
-            event.recordFailure(describe(ex), properties.initialBackoff(), properties.maxBackoff());
+            event.recordFailure(describe(ex), outboxProperties.initialBackoff(), outboxProperties.maxBackoff());
 
-            if (event.getAttempts() >= properties.alertAfterAttempts()) {
-                log.error("Outbox event {} ({}) has failed {} times, next attempt {}: {}",
-                        event.getId(), event.getTopic(), event.getAttempts(), event.getNextAttemptAt(), describe(ex));
+            if (event.getAttempts() >= outboxProperties.alertAfterAttempts()) {
+                log.error("Outbox event is still failing after {} attempts eventId={} topic={} nextAttemptAt={}: {}",
+                        event.getAttempts(), event.getId(), event.getTopic(), event.getNextAttemptAt(), describe(ex));
             } else {
-                log.warn("Outbox event {} ({}) failed, attempt {}: {}",
+                log.warn("Outbox send failed eventId={} topic={} attempt={}: {}",
                         event.getId(), event.getTopic(), event.getAttempts(), describe(ex));
             }
             return false;

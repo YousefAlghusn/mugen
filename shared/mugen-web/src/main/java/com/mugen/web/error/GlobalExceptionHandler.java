@@ -52,8 +52,14 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     public ProblemDetail handleAppException(AppException ex) {
         // Expected failures are not errors in the operational sense — a wrong
         // password is the system working. Logged at WARN without a stack trace so
-        // they do not drown out genuine faults.
-        log.warn("{} -> {} {}", ex.getErrorCode(), ex.getStatus().value(), ex.getMessage());
+        // they do not drown out genuine faults. A 5xx AppException is a different
+        // matter and keeps its stack.
+        if (ex.getStatus().is5xxServerError()) {
+            log.error("Request failed errorCode={} status={}", ex.getErrorCode(), ex.getStatus().value(), ex);
+        } else {
+            log.warn("Request failed errorCode={} status={}: {}",
+                    ex.getErrorCode(), ex.getStatus().value(), ex.getMessage());
+        }
         return problem(ex.getStatus(), ex.getErrorCode(), ex.getMessage());
     }
 
@@ -68,7 +74,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ProblemDetail handleUnexpected(Exception ex) {
         String traceId = TraceIdHolder.getOrCreate();
-        log.error("Unhandled exception [traceId={}]", traceId, ex);
+        log.error("Unhandled exception traceId={}", traceId, ex);
         return problem(HttpStatus.INTERNAL_SERVER_ERROR, ErrorCode.INTERNAL_ERROR,
                 "An unexpected error occurred. Quote traceId %s when reporting it.".formatted(traceId));
     }
@@ -83,11 +89,44 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 .map(fieldError -> new ValidationError(fieldError.getField(), fieldError.getDefaultMessage()))
                 .toList();
 
+        // Field names only. The rejected value is whatever the caller typed, which
+        // for this service is routinely an email address or a password.
+        log.warn("Request validation failed fields={}", errors.stream().map(ValidationError::field).toList());
+
         ProblemDetail body = problem(HttpStatus.BAD_REQUEST, ErrorCode.VALIDATION_FAILED,
                 "Request validation failed.");
         body.setProperty("errors", errors);
 
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
+    }
+
+    /**
+     * The one funnel every exception Spring MVC handles itself passes through — 405,
+     * 415, a malformed JSON body, a missing request parameter, no handler found.
+     * <p>
+     * Without this they answered with a {@code traceId} that appeared in no log line
+     * anywhere, so the id a user quotes to support led to nothing.
+     * <p>
+     * 4xx is logged without {@code ex.getMessage()} on purpose. Spring builds those
+     * messages from the offending input — {@code HttpMessageNotReadableException}
+     * quotes the request body back, which on this service is a registration payload
+     * with a password in it. The type and the path say what went wrong without
+     * copying the credential into Loki.
+     */
+    @Override
+    protected ResponseEntity<Object> handleExceptionInternal(Exception ex,
+                                                             Object body,
+                                                             HttpHeaders headers,
+                                                             HttpStatusCode statusCode,
+                                                             WebRequest request) {
+        if (statusCode.is5xxServerError()) {
+            log.error("Request failed status={} path={}",
+                    statusCode.value(), request.getDescription(false), ex);
+        } else {
+            log.warn("Request rejected status={} reason={} path={}",
+                    statusCode.value(), ex.getClass().getSimpleName(), request.getDescription(false));
+        }
+        return super.handleExceptionInternal(ex, body, headers, statusCode, request);
     }
 
     /**

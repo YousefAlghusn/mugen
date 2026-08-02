@@ -48,8 +48,8 @@ import java.util.Locale;
 public class SsoController {
 
     private final OAuthService oauthService;
-    private final RefreshTokenCookies refreshCookies;
-    private final SsoStateCookies ssoCookies;
+    private final RefreshTokenCookies refreshTokenCookies;
+    private final SsoStateCookies ssoStateCookies;
 
     /**
      * Sends the browser to the provider's consent screen.
@@ -64,7 +64,7 @@ public class SsoController {
 
         return ResponseEntity.status(HttpStatus.FOUND)
                 .location(redirect.authorizationUri())
-                .header(HttpHeaders.SET_COOKIE, ssoCookies.issue(redirect.browserNonce()).toString())
+                .header(HttpHeaders.SET_COOKIE, ssoStateCookies.issue(redirect.browserNonce()).toString())
                 .build();
     }
 
@@ -91,7 +91,7 @@ public class SsoController {
         // on our side, and its raw value is not echoed onward — it is attacker-
         // controlled text arriving in a query parameter.
         if (StringUtils.hasText(error)) {
-            log.info("{} SSO was not granted: {}", resolved, error);
+            log.info("SSO was not granted provider={} reason={}", resolved, error);
             return redirectBack(pending.redirectUri(), "sso_denied");
         }
 
@@ -101,9 +101,9 @@ public class SsoController {
 
             return ResponseEntity.status(HttpStatus.FOUND)
                     .location(URI.create(pending.redirectUri()))
-                    .header(HttpHeaders.SET_COOKIE, refreshCookies.issue(tokens.refreshToken()).toString())
+                    .header(HttpHeaders.SET_COOKIE, refreshTokenCookies.issue(tokens.refreshToken()).toString())
                     // The handshake is over; the nonce has no further use.
-                    .header(HttpHeaders.SET_COOKIE, ssoCookies.clear().toString())
+                    .header(HttpHeaders.SET_COOKIE, ssoStateCookies.clear().toString())
                     .build();
 
         } catch (AppException ex) {
@@ -111,7 +111,8 @@ public class SsoController {
             // person's sign-in — an unverified email, a provider already linked. They
             // are told on their own site, in their own application's language; the
             // machine-readable code is enough for it to say something useful.
-            log.info("{} SSO did not complete: {}", resolved, ex.getMessage());
+            log.warn("SSO did not complete provider={} errorCode={}: {}",
+                    resolved, ex.getErrorCode(), ex.getMessage());
             return redirectBack(pending.redirectUri(), ex.getErrorCode().name());
         }
     }
@@ -124,7 +125,7 @@ public class SsoController {
 
         return ResponseEntity.status(HttpStatus.FOUND)
                 .location(target)
-                .header(HttpHeaders.SET_COOKIE, ssoCookies.clear().toString())
+                .header(HttpHeaders.SET_COOKIE, ssoStateCookies.clear().toString())
                 .build();
     }
 

@@ -30,7 +30,7 @@ public class UserEventPublisher {
     /** Consumers: mugen-user, mugen-search. */
     public static final String USER_REGISTERED_TOPIC = "mugen.user.registered";
 
-    private final OutboxEventRepository outbox;
+    private final OutboxEventRepository outboxEvents;
     private final JsonMapper json;
 
     /**
@@ -52,7 +52,7 @@ public class UserEventPublisher {
         UserRegisteredEvent event = new UserRegisteredEvent(
                 eventId, user.getId(), user.getUsername(), user.getEmail(), Instant.now());
 
-        outbox.save(OutboxEvent.pending(
+        outboxEvents.save(OutboxEvent.pending(
                 eventId,
                 USER_REGISTERED_TOPIC,
                 UserRegisteredEvent.class.getSimpleName(),
@@ -61,6 +61,7 @@ public class UserEventPublisher {
                 user.getId().toString(),
                 json.writeValueAsString(event)));
 
-        log.debug("Queued {} for user {} as event {}", USER_REGISTERED_TOPIC, user.getId(), eventId);
+        log.debug("Queued outbox event topic={} userId={} eventId={}",
+                USER_REGISTERED_TOPIC, user.getId(), eventId);
     }
 }

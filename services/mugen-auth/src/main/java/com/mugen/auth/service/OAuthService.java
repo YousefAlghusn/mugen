@@ -72,15 +72,15 @@ public class OAuthService {
     /** Bounded so a pathologically popular handle cannot spin here. */
     private static final int USERNAME_ATTEMPTS = 5;
 
-    private final OAuthClientRegistry registry;
+    private final OAuthClientRegistry oauthClientRegistry;
     private final AuthorizationRequestStore pendingAuthorizations;
     private final OAuth2AccessTokenResponseClient<OAuth2AuthorizationCodeGrantRequest> tokenClient;
-    private final OAuth2UserService<OAuth2UserRequest, OAuth2User> userService;
+    private final OAuth2UserService<OAuth2UserRequest, OAuth2User> oauth2UserService;
     private final UserRepository users;
-    private final OAuthLinkRepository links;
+    private final OAuthLinkRepository oauthLinks;
     private final AuthService authService;
-    private final UserEventPublisher userEvents;
-    private final SsoProperties properties;
+    private final UserEventPublisher userEventPublisher;
+    private final SsoProperties ssoProperties;
 
     /**
      * Starts a sign-in: mints {@code state}, a PKCE verifier and a browser nonce,
@@ -90,8 +90,8 @@ public class OAuthService {
      * @return the provider URL, and the nonce the caller must put in a cookie
      */
     public SsoRedirect begin(OAuthProvider provider, String requestedRedirectUri) {
-        ClientRegistration registration = registry.registrationFor(provider);
-        String redirectUri = properties.resolveRedirectUri(requestedRedirectUri);
+        ClientRegistration registration = oauthClientRegistry.registrationFor(provider);
+        String redirectUri = ssoProperties.resolveRedirectUri(requestedRedirectUri);
         String state = STATE_GENERATOR.generateKey();
         String browserNonce = STATE_GENERATOR.generateKey();
 
@@ -103,7 +103,7 @@ public class OAuthService {
                 redirectUri,
                 browserNonce));
 
-        log.debug("Starting {} SSO, state {}", provider, state);
+        log.debug("Starting SSO provider={}", provider);
         return new SsoRedirect(URI.create(request.getAuthorizationRequestUri()), browserNonce);
     }
 
@@ -134,8 +134,7 @@ public class OAuthService {
                         browserNonce.getBytes(StandardCharsets.UTF_8),
                         pending.browserNonce().getBytes(StandardCharsets.UTF_8))) {
 
-            log.warn("SSO callback for state {} arrived without the browser nonce it was issued to — "
-                    + "possible login CSRF", state);
+            log.warn("SSO callback arrived without the browser nonce it was issued to — possible login CSRF");
             throw new AuthExceptions.SsoStateInvalid();
         }
 
@@ -161,20 +160,21 @@ public class OAuthService {
         // Google flow could be presented at the GitHub callback, and the code would
         // then be redeemed against a registration it was never meant for.
         if (pending.provider() != provider) {
-            log.warn("SSO state issued for {} was presented at the {} callback", pending.provider(), provider);
+            log.warn("SSO state was presented at another provider's callback issuedFor={} presentedAt={}",
+                    pending.provider(), provider);
             throw new AuthExceptions.SsoStateInvalid();
         }
         if (!StringUtils.hasText(code)) {
             throw new AuthExceptions.SsoStateInvalid();
         }
 
-        ClientRegistration registration = registry.registrationFor(provider);
+        ClientRegistration registration = oauthClientRegistry.registrationFor(provider);
         OAuth2AccessToken accessToken = exchange(registration, pending, code, state, provider);
         OAuthUserProfile profile = loadProfile(registration, accessToken, provider);
 
         SsoUser resolved = linkOrCreate(provider, profile);
-        log.info("SSO sign-in via {} for user {} ({})",
-                provider, resolved.user().getId(), resolved.created() ? "new account" : "existing account");
+        log.info("SSO sign-in provider={} userId={} newAccount={}",
+                provider, resolved.user().getId(), resolved.created());
 
         return authService.issueTokens(resolved.user(), context);
     }
@@ -201,7 +201,7 @@ public class OAuthService {
      */
     @Transactional
     public SsoUser linkOrCreate(OAuthProvider provider, OAuthUserProfile profile) {
-        Optional<OAuthLink> existingLink = links.findByProviderAccount(provider, profile.providerUserId());
+        Optional<OAuthLink> existingLink = oauthLinks.findByProviderAccount(provider, profile.providerUserId());
         if (existingLink.isPresent()) {
             User linked = existingLink.get().getUser();
             requireEnabled(linked);
@@ -212,7 +212,9 @@ public class OAuthService {
             throw new AuthExceptions.SsoEmailUnavailable(provider.name());
         }
         if (!profile.emailVerified()) {
-            log.info("Refused {} SSO for an unverified email address", provider);
+            // WARN, not INFO: this is a refused account takeover attempt as often
+            // as it is a misconfigured provider account.
+            log.warn("Refused SSO for an unverified email address provider={}", provider);
             throw new AuthExceptions.SsoEmailNotVerified(provider.name());
         }
 
@@ -228,7 +230,7 @@ public class OAuthService {
             // uq_oauth_links_user_provider allows one link per provider per user.
             // Reached when someone signs in with a second Google account whose
             // verified email is already on a mugen account linked to a first one.
-            if (links.existsByUserIdAndProvider(user.getId(), provider)) {
+            if (oauthLinks.existsByUserIdAndProvider(user.getId(), provider)) {
                 throw new AuthExceptions.SsoProviderAlreadyLinked(provider.name());
             }
             created = false;
@@ -238,13 +240,13 @@ public class OAuthService {
         }
 
         try {
-            links.saveAndFlush(OAuthLink.link(user, provider, profile.providerUserId()));
+            oauthLinks.saveAndFlush(OAuthLink.link(user, provider, profile.providerUserId()));
         } catch (DataIntegrityViolationException ex) {
             // Two first-time sign-ins for the same provider account arriving at once.
             // uq_oauth_links_provider_account is the real guarantee; the loser of the
             // race re-reads the winner's link rather than failing a legitimate login.
-            log.debug("Lost the race creating a {} link; re-reading", provider);
-            User winner = links.findByProviderAccount(provider, profile.providerUserId())
+            log.debug("Lost the race creating an OAuth link, re-reading provider={}", provider);
+            User winner = oauthLinks.findByProviderAccount(provider, profile.providerUserId())
                     .map(OAuthLink::getUser)
                     .orElseThrow(() -> ex);
             // No event: the caller signs in as the winner, so any account this call
@@ -255,7 +257,7 @@ public class OAuthService {
         // A first SSO sign-in creates an account exactly as registration does, so it
         // owes the same event — same transaction, same reasoning.
         if (created) {
-            userEvents.userRegistered(user);
+            userEventPublisher.userRegistered(user);
         }
 
         return new SsoUser(user, created);
@@ -288,7 +290,8 @@ public class OAuthService {
         } catch (RuntimeException ex) {
             // The provider's own error text can name the client id or echo the code,
             // so it is logged and not propagated to the browser.
-            log.warn("{} rejected the authorization code exchange: {}", provider, ex.getMessage());
+            log.warn("Provider rejected the authorization code exchange provider={}: {}",
+                    provider, ex.getMessage());
             throw new AuthExceptions.SsoExchangeFailed(provider.name(), ex);
         }
     }
@@ -297,10 +300,10 @@ public class OAuthService {
                                          OAuth2AccessToken accessToken,
                                          OAuthProvider provider) {
         try {
-            OAuth2User user = userService.loadUser(new OAuth2UserRequest(registration, accessToken));
-            return registry.mapperFor(provider).map(user, accessToken);
+            OAuth2User user = oauth2UserService.loadUser(new OAuth2UserRequest(registration, accessToken));
+            return oauthClientRegistry.mapperFor(provider).map(user, accessToken);
         } catch (RuntimeException ex) {
-            log.warn("Could not read the {} user profile: {}", provider, ex.getMessage());
+            log.warn("Could not read the provider user profile provider={}: {}", provider, ex.getMessage());
             throw new AuthExceptions.SsoExchangeFailed(provider.name(), ex);
         }
     }

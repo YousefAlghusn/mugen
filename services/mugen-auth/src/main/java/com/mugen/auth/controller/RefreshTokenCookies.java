@@ -21,7 +21,7 @@ import java.time.Duration;
 @RequiredArgsConstructor
 public class RefreshTokenCookies {
 
-    private final RefreshCookieProperties cookieProperties;
+    private final RefreshCookieProperties refreshCookieProperties;
     private final JwtProperties jwtProperties;
 
     public ResponseCookie issue(String refreshToken) {
@@ -42,10 +42,10 @@ public class RefreshTokenCookies {
     }
 
     private ResponseCookie.ResponseCookieBuilder base(String value) {
-        return ResponseCookie.from(cookieProperties.name(), value)
+        return ResponseCookie.from(refreshCookieProperties.name(), value)
                 .httpOnly(true)
-                .secure(cookieProperties.secure())
-                .path(cookieProperties.path())
-                .sameSite(cookieProperties.sameSite());
+                .secure(refreshCookieProperties.secure())
+                .path(refreshCookieProperties.path())
+                .sameSite(refreshCookieProperties.sameSite());
     }
 }

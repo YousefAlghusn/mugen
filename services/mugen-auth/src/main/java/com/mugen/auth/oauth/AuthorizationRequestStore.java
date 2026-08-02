@@ -37,7 +37,7 @@ public class AuthorizationRequestStore {
     private static final String FIELD_BROWSER_NONCE = "browserNonce";
 
     private final StringRedisTemplate redis;
-    private final SsoProperties properties;
+    private final SsoProperties ssoProperties;
 
     public void save(String state, PendingAuthorization pending) {
         Map<String, String> fields = new HashMap<>();
@@ -48,7 +48,7 @@ public class AuthorizationRequestStore {
 
         String key = key(state);
         redis.opsForHash().putAll(key, fields);
-        redis.expire(key, properties.stateTtl());
+        redis.expire(key, ssoProperties.stateTtl());
     }
 
     /**
@@ -69,7 +69,8 @@ public class AuthorizationRequestStore {
         // real one and a replay — only one of them proceeds. Deciding on the read
         // instead would let both through.
         if (!Boolean.TRUE.equals(redis.delete(key))) {
-            log.debug("SSO state {} was consumed by a concurrent callback", state);
+            // The state itself is a secret and never logged; traceId correlates.
+            log.debug("SSO state was consumed by a concurrent callback");
             return Optional.empty();
         }
 

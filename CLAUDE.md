@@ -13,6 +13,52 @@ Built as an enterprise learning project using Java 21 + Spring Boot 4.1.x.
 com.mugen.<servicename>
 e.g. com.mugen.auth, com.mugen.gateway, com.mugen.user
 
+## Naming — injected dependencies
+Fields and `@Bean` method parameters. One rule with two carve-outs, so a name
+never means two things in two files.
+
+- **Default: camelCase of the type.** `sessionService`, `authService`,
+  `passwordEncoder`, `jwtProperties`, `outboxProperties`, `refreshTokenCookies`.
+  Never bare `properties` — four different `@ConfigurationProperties` types were
+  all called that, and the field stopped saying which one.
+- **Repositories: the plural entity.** `users`, `sessions`, `oauthLinks`,
+  `outboxEvents` — `users.findByEmail(...)` reads as what it is, a collection.
+  This is why services must NOT drop their suffix: `sessions` is the
+  `SessionRepository`, so `SessionService` has to be `sessionService`.
+- **Infrastructure clients: the technology.** `redis`, `kafka`, `json`,
+  `restClient`.
+- Two beans of one type each take a qualifier: `refreshTokenDecoder`.
+
+## Logging
+Logs are read during an incident by someone who is not you.
+
+- **Levels.** ERROR — the service cannot do its job, a human is needed. WARN — one
+  request failed in a way worth noticing (security refusal, exhausted retry) but
+  the service is fine. INFO — a state change worth one line in production at
+  steady state. DEBUG — per-request detail for diagnosis, off in production.
+- **Every error response has a matching log line.** A ProblemDetail carries a
+  traceId, and that traceId is what a user quotes to support — if no log line
+  mentions it, the field is decoration. This includes the 4xx paths Spring MVC
+  handles for you (405, 415, malformed body, validation), which log nothing until
+  you make them.
+- **Log a framework exception's type, not its message, on 4xx.** Spring builds
+  those messages out of the offending input, so
+  `HttpMessageNotReadableException` quotes the request body — a registration
+  payload, password included.
+- **`key={}` for every identifier**: `userId={}`, `sessionId={}`, `eventId={}`,
+  `provider={}`. Bare values are unsearchable and cannot become structured fields
+  later. Non-identifiers stay prose.
+- One sentence, capitalised, no trailing full stop, always `{}` placeholders —
+  never string concatenation.
+- **No prefix naming the component.** The logger is already
+  `com.mugen.auth.service.OutboxPoller`; `"Outbox: ..."` says it twice.
+- **Never log PII or secrets**: no email addresses, password material, tokens,
+  OAuth `state`, PKCE verifiers, cookies or Authorization headers. Log the id
+  instead — an email in a log is an email in Loki, forever.
+- **Exceptions**: pass the throwable as the trailing argument (no `{}`) when the
+  stack matters. `ex.getMessage()` alone is only for expected failures whose stack
+  is noise, and the code should say why.
+
 ## Services
 - mugen-shared        (shared DTOs, Kafka contracts, utils)
 - mugen-auth          (JWT, SSO, sessions — SQL Server)

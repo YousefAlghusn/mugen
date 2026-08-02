@@ -40,17 +40,17 @@ import java.security.interfaces.RSAPublicKey;
 public class JwtKeyConfig {
 
     @Bean
-    RSAPrivateKey jwtSigningKey(JwtProperties properties) throws IOException {
-        try (InputStream pem = properties.privateKey().getInputStream()) {
+    RSAPrivateKey jwtSigningKey(JwtProperties jwtProperties) throws IOException {
+        try (InputStream pem = jwtProperties.privateKey().getInputStream()) {
             RSAPrivateKey key = RsaKeyConverters.pkcs8().convert(pem);
-            log.info("Loaded RS256 signing key from {}", properties.privateKey().getDescription());
+            log.info("Loaded RS256 signing key from {}", jwtProperties.privateKey().getDescription());
             return key;
         }
     }
 
     @Bean
-    RSAPublicKey jwtVerificationKey(JwtProperties properties) throws IOException {
-        try (InputStream pem = properties.publicKey().getInputStream()) {
+    RSAPublicKey jwtVerificationKey(JwtProperties jwtProperties) throws IOException {
+        try (InputStream pem = jwtProperties.publicKey().getInputStream()) {
             return RsaKeyConverters.x509().convert(pem);
         }
     }
@@ -89,21 +89,21 @@ public class JwtKeyConfig {
      */
     @Bean
     @Primary
-    JwtDecoder accessTokenDecoder(RSAPublicKey publicKey, JwtProperties properties) {
-        return decoderFor(publicKey, properties, TokenType.ACCESS);
+    JwtDecoder accessTokenDecoder(RSAPublicKey publicKey, JwtProperties jwtProperties) {
+        return decoderFor(publicKey, jwtProperties, TokenType.ACCESS);
     }
 
     /** Used only by the refresh endpoint; rejects access tokens. */
     @Bean
-    JwtDecoder refreshTokenDecoder(RSAPublicKey publicKey, JwtProperties properties) {
-        return decoderFor(publicKey, properties, TokenType.REFRESH);
+    JwtDecoder refreshTokenDecoder(RSAPublicKey publicKey, JwtProperties jwtProperties) {
+        return decoderFor(publicKey, jwtProperties, TokenType.REFRESH);
     }
 
-    private static JwtDecoder decoderFor(RSAPublicKey publicKey, JwtProperties properties, String tokenType) {
+    private static JwtDecoder decoderFor(RSAPublicKey publicKey, JwtProperties jwtProperties, String tokenType) {
         NimbusJwtDecoder decoder = NimbusJwtDecoder.withPublicKey(publicKey).build();
         decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(
                 new JwtTimestampValidator(),
-                new JwtIssuerValidator(properties.issuer()),
+                new JwtIssuerValidator(jwtProperties.issuer()),
                 new TokenTypeValidator(tokenType)));
         return decoder;
     }

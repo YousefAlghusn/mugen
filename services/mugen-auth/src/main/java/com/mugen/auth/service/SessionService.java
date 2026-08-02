@@ -23,14 +23,14 @@ import java.util.UUID;
 public class SessionService {
 
     private final SessionRepository sessions;
-    private final RevocationCacheService revocationCache;
-    private final JwtProperties properties;
+    private final RevocationCacheService revocationCacheService;
+    private final JwtProperties jwtProperties;
 
     @Transactional
     public Session open(User user, String userAgent, String ipAddress) {
         Session session = Session.open(
                 user,
-                Instant.now().plus(properties.refreshTokenTtl()),
+                Instant.now().plus(jwtProperties.refreshTokenTtl()),
                 truncate(userAgent, 400),
                 truncate(ipAddress, 45));
         return sessions.save(session);
@@ -72,8 +72,9 @@ public class SessionService {
         }
 
         if (presentedVersion != session.getTokenVersion()) {
-            log.warn("Refresh token replay on session {} (presented v{}, current v{}) — revoking session, user {}",
-                    sessionId, presentedVersion, session.getTokenVersion(), session.getUser().getId());
+            log.warn("Refresh token replay detected, revoking session sessionId={} userId={} "
+                            + "presentedVersion={} currentVersion={}",
+                    sessionId, session.getUser().getId(), presentedVersion, session.getTokenVersion());
             revoke(session);
             throw new AuthExceptions.SessionReplayDetected();
         }
@@ -121,7 +122,7 @@ public class SessionService {
 
         // Redis after the DB update: the gateway must never see a session cached as
         // revoked that the database still considers live.
-        revocationCache.revokeAll(doomed);
+        revocationCacheService.revokeAll(doomed);
         return revoked;
     }
 
@@ -142,13 +143,13 @@ public class SessionService {
                 .toList();
 
         sessions.revokeAllForUser(userId, Instant.now());
-        revocationCache.revokeAll(doomed);
+        revocationCacheService.revokeAll(doomed);
     }
 
     private void revoke(Session session) {
         session.revoke();
         sessions.save(session);
-        revocationCache.revoke(session.getId());
+        revocationCacheService.revoke(session.getId());
     }
 
     private static String truncate(String value, int max) {

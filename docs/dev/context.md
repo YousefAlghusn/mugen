@@ -4,10 +4,15 @@ Companion to tasks.md, which is the checklist. This file holds only what the cod
 and git history do NOT already say: live status, decisions and their reasoning,
 and traps worth not rediscovering.
 
-## Status (2026-08-02)
+## Status (paused 2026-08-02)
 Phases 0, 1 and 2 done except **2.10** (Swagger) and the **2.11 exit gate**. 2.8 —
-the outbox and the `mugen.user.registered` publisher — landed this session.
+the outbox and the `mugen.user.registered` publisher — landed this session, followed
+by a naming and logging consistency pass over the whole service.
 79 unit + 34 integration tests green (was 46 + 22).
+
+**Next task is 2.10 Swagger / OpenAPI**, and its first step is a compatibility
+check, not code: confirm a springdoc release built for Boot 4.1 / Framework 7
+resolves from Maven Central before designing around it. 2.x targets Boot 3.
 
 Testcontainers starts its own SQL Server and Redis, so none of this exercises the
 compose stack, and no test has ever spoken to a real broker — the outbox tests all
@@ -57,6 +62,26 @@ Not on the gate, deferred by choice:
    AuthorizationRequestStore, none for the profile mappers. Plus the quality review
    and the service's own Dockerfile.
 3. Phase 3 — gateway.
+
+## Conventions — naming and logging (2026-08-02)
+Both are written in CLAUDE.md and were applied across mugen-auth and mugen-web.
+They live there rather than here because every service must follow them; what
+belongs here is only why they exist.
+
+- The trigger was `sessions` meaning `SessionService` in `AuthService` and
+  `SessionRepository` in `SessionService` — one name, two things. Hence: repositories
+  take the plural entity, so services must keep their suffix.
+- Four unrelated `@ConfigurationProperties` types were all injected as `properties`.
+- Two log lines carried PII or secrets: a registration email, and the SSO `state` in
+  three places. Both removed — a log line is a Loki document, permanently.
+- **Only two of the four exception-handler paths logged anything.** Validation
+  failures and everything `ResponseEntityExceptionHandler` handles natively (405,
+  415, malformed body, no handler) answered with a traceId that appeared in no log,
+  so the id a user quotes to support led nowhere. Fixed by overriding
+  `handleExceptionInternal`, and guarded by a test using a Logback `ListAppender`.
+- 4xx framework exceptions are logged by type, never by message: Spring builds
+  `HttpMessageNotReadableException`'s message from the body it could not parse,
+  which here is a registration payload with a password in it.
 
 ## Phase 2 — Outbox design (2026-08-02)
 - **Full outbox, not a direct publish.** The alternative was

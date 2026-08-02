@@ -29,7 +29,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
     private final AuthService authService;
-    private final RefreshTokenCookies refreshCookies;
+    private final RefreshTokenCookies refreshTokenCookies;
     private final RefreshCookieProperties cookieProperties;
 
     @PostMapping("/register")
@@ -84,12 +84,12 @@ public class AuthController {
         }
 
         return ResponseEntity.noContent()
-                .header(HttpHeaders.SET_COOKIE, refreshCookies.clear().toString())
+                .header(HttpHeaders.SET_COOKIE, refreshTokenCookies.clear().toString())
                 .build();
     }
 
     private ResponseEntity<AuthResponse> respondWith(TokenPair tokens, HttpStatus status) {
-        ResponseCookie cookie = refreshCookies.issue(tokens.refreshToken());
+        ResponseCookie cookie = refreshTokenCookies.issue(tokens.refreshToken());
 
         return ResponseEntity.status(status)
                 .header(HttpHeaders.SET_COOKIE, cookie.toString())
