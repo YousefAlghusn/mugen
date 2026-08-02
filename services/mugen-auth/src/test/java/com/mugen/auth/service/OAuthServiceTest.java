@@ -49,6 +49,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
@@ -89,6 +90,9 @@ class OAuthServiceTest {
     private AuthService authService;
 
     @Mock
+    private UserEventPublisher userEvents;
+
+    @Mock
     private OAuthProfileMapper profileMapper;
 
     private SsoProperties properties;
@@ -98,7 +102,8 @@ class OAuthServiceTest {
     void setUp() {
         properties = new SsoProperties(Duration.ofMinutes(5), FRONTEND, List.of(FRONTEND));
         oauthService = new OAuthService(
-                registry, pendingAuthorizations, tokenClient, userService, users, links, authService, properties);
+                registry, pendingAuthorizations, tokenClient, userService, users, links,
+                authService, userEvents, properties);
 
         when(registry.registrationFor(OAuthProvider.GOOGLE)).thenReturn(registration(CALLBACK));
         when(registry.mapperFor(OAuthProvider.GOOGLE)).thenReturn(profileMapper);
@@ -501,6 +506,88 @@ class OAuthServiceTest {
             // showing a legitimate user an error on their very first sign-in.
             assertThat(resolved.user()).isSameAs(winner);
             assertThat(resolved.created()).isFalse();
+        }
+    }
+
+    /**
+     * SSO creates accounts just as registration does, so it owes the same
+     * {@code mugen.user.registered} event — and owes it exactly once. An account
+     * that never emits it has no profile in mugen-user, permanently; one that emits
+     * it twice would be fine (consumers deduplicate on eventId) but for the account
+     * that does not exist, which is the case the race below covers.
+     */
+    @Nested
+    @DisplayName("linkOrCreate → mugen.user.registered")
+    class RegistrationEvent {
+
+        @Test
+        @DisplayName("a first-time sign-in announces the new account")
+        void firstSignInPublishes() {
+            when(links.findByProviderAccount(any(), any())).thenReturn(Optional.empty());
+            when(users.findByEmail("kaneki@mugen.dev")).thenReturn(Optional.empty());
+            when(users.existsByUsername(any())).thenReturn(false);
+            when(users.saveAndFlush(any())).thenAnswer(invocation -> {
+                User created = invocation.getArgument(0);
+                ReflectionTestUtils.setField(created, "id", UUID.randomUUID());
+                return created;
+            });
+
+            OAuthService.SsoUser resolved = oauthService.linkOrCreate(OAuthProvider.GOOGLE, verifiedProfile());
+
+            verify(userEvents).userRegistered(resolved.user());
+        }
+
+        @Test
+        @DisplayName("signing in again through an existing link announces nothing")
+        void returningUserPublishesNothing() {
+            User existing = userWithId("kaneki", "kaneki@mugen.dev");
+            when(links.findByProviderAccount(any(), any()))
+                    .thenReturn(Optional.of(OAuthLink.link(existing, OAuthProvider.GOOGLE, "google-sub-1")));
+
+            oauthService.linkOrCreate(OAuthProvider.GOOGLE, verifiedProfile());
+
+            verifyNoInteractions(userEvents);
+        }
+
+        @Test
+        @DisplayName("linking a provider to an account that already exists announces nothing")
+        void linkingExistingAccountPublishesNothing() {
+            User existing = userWithId("kaneki", "kaneki@mugen.dev");
+            when(links.findByProviderAccount(any(), any())).thenReturn(Optional.empty());
+            when(users.findByEmail("kaneki@mugen.dev")).thenReturn(Optional.of(existing));
+            when(links.existsByUserIdAndProvider(existing.getId(), OAuthProvider.GOOGLE)).thenReturn(false);
+
+            oauthService.linkOrCreate(OAuthProvider.GOOGLE, verifiedProfile());
+
+            // The account is not new. mugen-user already has its profile, and a
+            // second event would be an update it has no way to interpret.
+            verifyNoInteractions(userEvents);
+        }
+
+        /**
+         * Losing the link race means signing in as the winner, so the account this
+         * call created is unreachable. Announcing it would have mugen-user build a
+         * profile for an account nobody can ever log into.
+         */
+        @Test
+        @DisplayName("the loser of a first-sign-in race announces nothing")
+        void raceLoserPublishesNothing() {
+            User winner = userWithId("kaneki", "kaneki@mugen.dev");
+            when(links.findByProviderAccount(OAuthProvider.GOOGLE, "google-sub-1"))
+                    .thenReturn(Optional.empty())
+                    .thenReturn(Optional.of(OAuthLink.link(winner, OAuthProvider.GOOGLE, "google-sub-1")));
+            when(users.findByEmail("kaneki@mugen.dev")).thenReturn(Optional.empty());
+            when(users.existsByUsername(any())).thenReturn(false);
+            when(users.saveAndFlush(any())).thenAnswer(invocation -> {
+                User created = invocation.getArgument(0);
+                ReflectionTestUtils.setField(created, "id", UUID.randomUUID());
+                return created;
+            });
+            when(links.saveAndFlush(any())).thenThrow(new DataIntegrityViolationException("uq_oauth_links"));
+
+            oauthService.linkOrCreate(OAuthProvider.GOOGLE, verifiedProfile());
+
+            verifyNoInteractions(userEvents);
         }
     }
 }

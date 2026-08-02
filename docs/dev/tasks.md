@@ -146,18 +146,26 @@ for the next.
 - [x] (extra) RefreshTokenCookies + RefreshCookieProperties — HttpOnly, Secure,
       SameSite=Strict, Path=/api/v1/auth, defined in one place
 
-### 2.8 Kafka  ← NEXT
-- [ ] UserEventPublisher (publish mugen.user.registered after register)
-- **Open decision, settle before writing code:** CLAUDE.md requires the outbox
-  pattern for any Kafka publish that must be atomic with a DB write, and this is
-  one — a lost event leaves a user who exists in mugen-auth with no profile in
-  mugen-user, permanently. But outbox work is scheduled in Phase 5. Either build
-  the full outbox here (V4 migration + entity + @Scheduled poller, and Phase 5
-  reuses a proven pattern) or publish directly via
-  `@TransactionalEventListener(AFTER_COMMIT)` and accept that a crash between
-  commit and send loses the event silently.
-- Note SSO registers users too: `OAuthService.linkOrCreate` returns
-  `SsoUser(user, created)` so that path can publish the same event.
+### 2.8 Kafka
+- [x] UserEventPublisher (publish mugen.user.registered after register)
+- **Decision taken: the full outbox, here, not a direct publish.** CLAUDE.md
+  requires it for any Kafka publish that must be atomic with a DB write, and this
+  is one — a lost event leaves a user in mugen-auth with no profile in mugen-user,
+  permanently. Nothing else gives atomicity: Kafka and Redis are both a second
+  system, and a second system reintroduces the dual write. Phase 5 now reuses a
+  pattern proven against a real database instead of inventing one.
+- [x] (extra) V4__create_outbox_events.sql — `ISJSON` CHECK on the payload, and
+      filtered indexes so polling costs the size of the backlog, not the table
+- [x] (extra) OutboxEvent entity — assigned id, which is also the payload's
+      `eventId`; implements `Persistable` so an assigned id still INSERTs
+- [x] (extra) OutboxPoller (@Scheduled) — claims rows with
+      `WITH (UPDLOCK, READPAST, ROWLOCK)` so two instances never publish the same
+      event, exponential backoff, retention sweep
+- [x] Both registration routes publish: `AuthService.register` and
+      `OAuthService.linkOrCreate` when it creates an account
+- **Delivery is at-least-once.** A send that succeeds and then fails to commit is
+  re-sent, so every consumer must deduplicate on `eventId` — this is the
+  requirement Phase 4.7's `UserRegisteredConsumerTest (idempotency)` is testing.
 
 ### 2.9 Tests
 - [x] JwtServiceTest (sign, verify, tampered token, expired, wrong key, type confusion)
@@ -171,8 +179,13 @@ for the next.
 - [x] (extra) SsoControllerTest (@WebMvcTest — redirect targets and the cookie
       attributes, which are the whole security model of the flow and are
       invisible from a service-level test)
+- [x] (extra) OutboxEventTest, UserEventPublisherTest, OutboxPollerTest — backoff
+      overflow, payload contract, and what one poison event does to its batch
+- [x] (extra) OutboxIntegrationTest (Testcontainers SQL Server) — the half that
+      only exists against a real server: the ISJSON constraint and the native
+      claim query, whose whole meaning is its table hints
 
-### 2.10 Swagger / OpenAPI
+### 2.10 Swagger / OpenAPI  ← NEXT
 Interactive API docs, so the service can be exercised from a browser instead of
 by hand-writing requests. Set up here, in the first service, because whatever
 shape it takes gets copied into the other ten.
@@ -206,6 +219,11 @@ services get built from, so anything wrong here gets copied ten times.
 - [ ] **Exercise every endpoint against the running service** — register, login,
       refresh, logout, sessions list/revoke, /me, /validate. `http/auth.http`
       (Phase 11.1) is the natural artifact; pull it forward to here.
+- [ ] **Watch one event go all the way to Kafka.** Register a user, then confirm
+      the row in `outbox_events` gets `published_at` set and the message lands on
+      `mugen.user.registered` (`kafka-console-consumer`). Every outbox test mocks
+      the broker, so the poller has never spoken to a real one — this is also the
+      first check that the payload is readable to a consumer that is not us.
 - [ ] **Run the SSO flow against a real Google and a real GitHub app.** It has
       never touched a provider: token exchange and user-info are stubbed in every
       test and the `sso` profile has never been activated, so
@@ -442,7 +460,15 @@ application.yml files and restarting each.
 
 ### 8.2 Database layer
 - [ ] V1__create_payments.sql
-- [ ] V2__create_outbox.sql
+- [ ] V2__create_outbox.sql — second implementation of the pattern; mugen-auth's
+      `V4__create_outbox_events.sql` is the reference. Postgres changes more than
+      the types: `JSONB` replaces `NVARCHAR(MAX)` + the `ISJSON` check, there is
+      no CLUSTERED/NONCLUSTERED split, and claiming rows is
+      `FOR UPDATE SKIP LOCKED` rather than `WITH (UPDLOCK, READPAST, ROWLOCK)`.
+      **With two real implementations, decide here whether the JPA entity, poller
+      and properties move to a shared `mugen-outbox` module** — the same call
+      `mugen-web` settled for the error hierarchy. Deliberately not decided off
+      one implementation.
 - [ ] Payment entity + PaymentRepository
 - [ ] OutboxEvent entity + OutboxEventRepository
 

@@ -79,6 +79,7 @@ public class OAuthService {
     private final UserRepository users;
     private final OAuthLinkRepository links;
     private final AuthService authService;
+    private final UserEventPublisher userEvents;
     private final SsoProperties properties;
 
     /**
@@ -246,7 +247,15 @@ public class OAuthService {
             User winner = links.findByProviderAccount(provider, profile.providerUserId())
                     .map(OAuthLink::getUser)
                     .orElseThrow(() -> ex);
+            // No event: the caller signs in as the winner, so any account this call
+            // created is unreachable and must not get a profile in mugen-user.
             return new SsoUser(winner, false);
+        }
+
+        // A first SSO sign-in creates an account exactly as registration does, so it
+        // owes the same event — same transaction, same reasoning.
+        if (created) {
+            userEvents.userRegistered(user);
         }
 
         return new SsoUser(user, created);

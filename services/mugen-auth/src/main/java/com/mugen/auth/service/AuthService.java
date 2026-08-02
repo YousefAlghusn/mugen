@@ -32,6 +32,7 @@ public class AuthService {
     private final JwtService jwt;
     private final PasswordEncoder passwordEncoder;
     private final JwtProperties jwtProperties;
+    private final UserEventPublisher userEvents;
 
     /**
      * Creates an account and logs it straight in.
@@ -59,6 +60,10 @@ public class AuthService {
             log.debug("Registration lost the uniqueness race for {}", normalisedEmail);
             throw new AuthExceptions.EmailAlreadyRegistered(normalisedEmail);
         }
+
+        // In this transaction, so the account and the announcement of it commit
+        // together. mugen-user builds the profile from this event.
+        userEvents.userRegistered(user);
 
         log.info("Registered user {}", user.getId());
         return issueTokens(user, context);

@@ -42,6 +42,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
         // Nothing here should reach out to infrastructure this test does not own.
         "eureka.client.enabled=false",
         "management.tracing.enabled=false",
+        "mugen.outbox.enabled=false",
         "spring.autoconfigure.exclude=org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration"
 })
 @Testcontainers

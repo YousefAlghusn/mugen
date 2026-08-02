@@ -4,14 +4,14 @@ Companion to tasks.md, which is the checklist. This file holds only what the cod
 and git history do NOT already say: live status, decisions and their reasoning,
 and traps worth not rediscovering.
 
-## Status (paused 2026-07-31)
-Phases 0, 1 and 2 done except **2.8** — the Kafka `mugen.user.registered` publisher,
-which is the next task. 46 unit + 22 integration tests green.
+## Status (2026-08-02)
+Phases 0, 1 and 2 done except **2.10** (Swagger) and the **2.11 exit gate**. 2.8 —
+the outbox and the `mugen.user.registered` publisher — landed this session.
+79 unit + 34 integration tests green (was 46 + 22).
 
-The integration suite ran against a live Docker daemon for the first time this
-session and immediately caught two context-load failures no unit test could see
-(both under "Boot 4 traps"). Testcontainers starts its own SQL Server and Redis, so
-this still does not exercise the compose stack.
+Testcontainers starts its own SQL Server and Redis, so none of this exercises the
+compose stack, and no test has ever spoken to a real broker — the outbox tests all
+mock `KafkaTemplate`. Both are on the 2.11 gate.
 
 ## Toolchain on this machine
 - JDK 21: `C:\Users\youse\.jdks\ms-21.0.12` (Microsoft OpenJDK, via IntelliJ)
@@ -35,27 +35,57 @@ point Google's own credential check takes over.
 Not on the gate, deferred by choice:
 - Nothing ships logs to Loki. Grafana has the datasource but no writer; services
   need a Loki appender (loki-logback-appender) when logging is set up.
+- **Orphan user row in `OAuthService.linkOrCreate`** (pre-existing, spotted while
+  wiring 2.8). Two first-ever sign-ins for the same provider account can both find
+  no link and both create a user; the loser of the `oauth_links` race re-reads the
+  winner and signs in as them, leaving its own freshly-created user row unreachable
+  — no link, no password, and now deliberately no `mugen.user.registered` either,
+  since a profile for an unreachable account is worse than none. Needs a
+  narrow window and a matching provider account, so it is not urgent; the fix is
+  to delete the losing row in the catch block.
 
 ## Up next
-1. **2.8 UserEventPublisher** — publish `mugen.user.registered` after registration.
-   Open question, deliberately not decided: CLAUDE.md requires the outbox pattern
-   for any Kafka publish that must be atomic with a DB write, and this is one (a
-   lost event means a user with no profile in mugen-user, forever) — but tasks.md
-   schedules outbox work in Phase 5. Full outbox in auth vs. direct publish after
-   commit is the fork to settle first.
-   Note SSO creates accounts too: `OAuthService.linkOrCreate` returns
-   `SsoUser(user, created)` precisely so that path publishes the same event.
-2. **2.10 Swagger / OpenAPI** — set up here because the shape gets copied into the
+1. **2.10 Swagger / OpenAPI** — set up here because the shape gets copied into the
    other ten services. Verify a Boot 4 / Framework 7 compatible springdoc release
    exists before designing around it; 2.x targets Boot 3.
-3. **2.11 exit gate — Phase 3 does not start until all of it is ticked.** Full list
-   in tasks.md. The three that are not yet true at all: the service has never been
-   run (`docker compose up` has never been executed), SSO has never touched a real
-   provider, and the regression suite has known holes — no controller tests for
-   AuthController / SessionController / TokenIntrospectController, none for
-   RevocationCacheService or AuthorizationRequestStore, none for the profile
-   mappers. Plus the quality review and the service's own Dockerfile.
-4. Phase 3 — gateway.
+2. **2.11 exit gate — Phase 3 does not start until all of it is ticked.** Full list
+   in tasks.md. What is not yet true at all: the service has never been run
+   (`docker compose up` has never been executed), SSO has never touched a real
+   provider, no event has ever reached a real broker, and the regression suite has
+   known holes — no controller tests for AuthController / SessionController /
+   TokenIntrospectController, none for RevocationCacheService or
+   AuthorizationRequestStore, none for the profile mappers. Plus the quality review
+   and the service's own Dockerfile.
+3. Phase 3 — gateway.
+
+## Phase 2 — Outbox design (2026-08-02)
+- **Full outbox, not a direct publish.** The alternative was
+  `@TransactionalEventListener(AFTER_COMMIT)`, which loses the event on a crash
+  between commit and send. Considered and rejected: staging the event in Redis
+  instead — Redis is a second system exactly as Kafka is, so it reinstates the dual
+  write, and this Redis is stock `redis:7-alpine` (RDB only, no AOF), which can
+  drop up to 60s of writes anyway.
+- The row id **is** the payload's `eventId`. Costs a `Persistable` implementation,
+  because Spring Data would otherwise see a non-null id and `merge` — a SELECT that
+  always misses. Buys one identifier from the table through to the consumer that
+  deduplicates on it.
+- Rows are claimed with `WITH (UPDLOCK, READPAST, ROWLOCK)`. `READPAST` is the
+  load-bearing one: without it two pollers serialise instead of sharing the work.
+  Postgres spells all three `FOR UPDATE SKIP LOCKED`.
+- The poller's transaction spans the Kafka round trip, which is normally wrong.
+  It is defensible here because the locks it holds are contended only by other
+  pollers — which `READPAST` skips — and never by registration, which only inserts.
+  `send-timeout` and `max.block.ms` bound it regardless.
+- Producer `value-serializer` is **StringSerializer**, not `JsonSerializer`: the
+  payload is already JSON text, and JsonSerializer would encode it twice. Side
+  benefit — no `__TypeId__` header, so consumers bind mugen-shared's record by
+  configuration instead of inheriting mugen-auth's package names over the wire.
+- A failing event retries forever at capped backoff and is **never discarded**;
+  past `alert-after-attempts` it just logs at ERROR. The purge sweep only ever
+  deletes rows the broker has acknowledged.
+- Known limitation, harmless today: a batch is sent in parallel, so if event A
+  fails and B succeeds for the *same* key, B is published first and A retries
+  later. `mugen.user.registered` is one-per-user, so no key ever has two.
 
 ## Phase 2 — SSO design (2026-07-31)
 - The authorization code flow is driven explicitly, not through `oauth2Login()`.

@@ -70,13 +70,25 @@ spring:
     bootstrap-servers: ${MUGEN_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      # StringSerializer, not JsonSerializer: this service publishes only from the
+      # outbox, where the payload was serialized at write time and is sent
+      # byte-for-byte. Handing an already-encoded string to JsonSerializer would
+      # encode it a second time and ship a JSON string containing JSON.
+      #
+      # It also drops JsonSerializer's __TypeId__ header, which is the better
+      # contract — that header names a producer-side Java class, and consumers
+      # should bind mugen-shared's record by configuration, not inherit
+      # mugen-auth's package layout over the wire.
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
       # acks=all + idempotence: a registration event must not be lost or
       # duplicated on broker retry. mugen-user and mugen-search both key off it.
       acks: all
       properties:
         enable.idempotence: true
         max.in.flight.requests.per.connection: 5
+        # Bounded so a broker that is merely unreachable fails the send instead of
+        # blocking inside the poller's transaction until its own timeout.
+        max.block.ms: 5000
       retries: 3
 
   mvc:
@@ -140,6 +152,31 @@ mugen:
       # freshly signed-in browser.
       allowed-redirect-uris:
         - ${MUGEN_SSO_DEFAULT_REDIRECT_URI:http://localhost:4200/auth/callback}
+
+  # -------------------------------------------------------------------------
+  # Transactional outbox. Events are written to outbox_events in the same
+  # transaction as the row they describe, then drained to Kafka from here.
+  # See V4__create_outbox_events.sql.
+  # -------------------------------------------------------------------------
+  outbox:
+    # Off only for tests that start the context without a broker.
+    enabled: ${MUGEN_OUTBOX_ENABLED:true}
+    # Delivery latency for a healthy pipeline is roughly this. Raise batch-size
+    # before shortening it — a shorter tick costs a query per instance per tick
+    # whether or not there is anything to do.
+    poll-interval: ${MUGEN_OUTBOX_POLL_INTERVAL:1s}
+    batch-size: ${MUGEN_OUTBOX_BATCH_SIZE:100}
+    # The poller holds row locks while it waits, so this is a ceiling on how long
+    # one unreachable broker can hold a database connection.
+    send-timeout: ${MUGEN_OUTBOX_SEND_TIMEOUT:10s}
+    initial-backoff: ${MUGEN_OUTBOX_INITIAL_BACKOFF:2s}
+    max-backoff: ${MUGEN_OUTBOX_MAX_BACKOFF:5m}
+    # Where a failure stops being plausibly transient and starts logging at ERROR.
+    # Nothing is ever discarded — a failing row retries at max-backoff forever.
+    alert-after-attempts: ${MUGEN_OUTBOX_ALERT_AFTER_ATTEMPTS:10}
+    # How long a delivered event stays queryable before the purge sweep.
+    retention: ${MUGEN_OUTBOX_RETENTION:7d}
+    purge-interval: ${MUGEN_OUTBOX_PURGE_INTERVAL:1h}
 
   jwt:
     private-key: ${JWT_PRIVATE_KEY_PATH:classpath:keys/private.pem}

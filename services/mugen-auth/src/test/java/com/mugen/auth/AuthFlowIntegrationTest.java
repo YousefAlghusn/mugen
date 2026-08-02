@@ -42,7 +42,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 @SpringBootTest(properties = {
         "eureka.client.enabled=false",
-        "management.tracing.enabled=false"
+        "management.tracing.enabled=false",
+        // Registration still writes its outbox row — that is part of the flow under
+        // test. Only the draining is off, since there is no broker here and a poller
+        // retrying against one would just add noise and hold connections.
+        "mugen.outbox.enabled=false"
 })
 @Testcontainers
 class AuthFlowIntegrationTest {
