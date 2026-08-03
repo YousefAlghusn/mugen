@@ -185,25 +185,49 @@ for the next.
       only exists against a real server: the ISJSON constraint and the native
       claim query, whose whole meaning is its table hints
 
-### 2.10 Swagger / OpenAPI  ← NEXT
+### 2.10 Swagger / OpenAPI
 Interactive API docs, so the service can be exercised from a browser instead of
 by hand-writing requests. Set up here, in the first service, because whatever
 shape it takes gets copied into the other ten.
 
-- [ ] **Check compatibility before anything else.** springdoc-openapi 2.x targets
+- [x] **Check compatibility before anything else.** springdoc-openapi 2.x targets
       Boot 3 / Spring Framework 6; this project is on Boot 4.1 / Framework 7 and
       needs a release built for it. Confirm one exists and resolves from Maven
       Central before designing around it — the same verification the Boot 4.1.0
       and Spring Cloud 2025.1.2 pins got. If none exists yet, fall back to a
       hand-maintained `openapi.yaml` served by Swagger UI, and record the choice.
-- [ ] Dependency + `/swagger-ui.html` and `/v3/api-docs` reachable
-- [ ] Permit both in SecurityConfig — they sit behind the gateway, but they are
+- **Result: springdoc 3.1.0, no fallback needed.** The 3.x line is the Boot 4 one
+  (3.0.0 shipped for Boot 4.0.0); 3.1.0 declares
+  `spring-boot-starter-parent:4.1.0` as its own parent — the exact version this
+  project pins — so its Spring dependencies resolve to what the build already
+  has. Verified by resolving it from Central, not by reading a compatibility
+  table. Version is managed by importing `springdoc-openapi-bom` in the root pom,
+  the same way `testcontainers-bom` is, so the other ten services never repeat it.
+- [x] Dependency + `/swagger-ui.html` and `/v3/api-docs` reachable
+- [x] Permit both in SecurityConfig — they sit behind the gateway, but they are
       unauthenticated by nature and must be listed deliberately, not by accident
-- [ ] Document the auth scheme so "Authorize" works: HTTP bearer, JWT format
-- [ ] Annotate the endpoints that are not self-explanatory — the SSO pair in
+- [x] Document the auth scheme so "Authorize" works: HTTP bearer, JWT format
+- [x] Annotate the endpoints that are not self-explanatory — the SSO pair in
       particular (a browser redirect flow, not a JSON call) and the refresh
       cookie, which never appears in a request body
-- [ ] Decide whether it is exposed in deployed environments or dev-only
+- [x] Decide whether it is exposed in deployed environments or dev-only
+- **Decision: on in dev, off in the `docker` profile, as two separate switches.**
+  `springdoc.api-docs.enabled` and `springdoc.swagger-ui.enabled` are distinct
+  because wanting one is not wanting the other: the document is a machine-readable
+  contract with an obvious later consumer (the gateway aggregating per-service
+  docs, Phase 3), while the UI is an interactive form that submits real
+  credentials and has no caller in production. Both are env-var overridable, so an
+  environment turns them back on deliberately rather than by editing an image.
+- [x] (extra) OpenApiConfig builds the document from `RefreshCookieProperties` and
+      `JwtProperties` rather than from literals — the cookie name and the TTLs the
+      docs promise are the ones the service actually uses, and cannot go stale
+      behind a rename
+- [x] (extra) OpenApiIntegrationTest — the document is generated, is readable with
+      no token, excludes `/actuator`, declares both security schemes, and marks
+      exactly the token-protected operations. Guards the one pairing nothing else
+      would catch: the springdoc paths permitted in SecurityConfig against the
+      paths springdoc serves. Break either alone and the docs 401 — still working
+      in every developer's browser, because they are already logged in.
 
 ### 2.11 Exit gate — Phase 3 does not start until every box here is ticked
 Not a checklist of nice-to-haves. mugen-auth is the template the other ten

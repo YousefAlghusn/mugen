@@ -4,15 +4,13 @@ Companion to tasks.md, which is the checklist. This file holds only what the cod
 and git history do NOT already say: live status, decisions and their reasoning,
 and traps worth not rediscovering.
 
-## Status (paused 2026-08-02)
-Phases 0, 1 and 2 done except **2.10** (Swagger) and the **2.11 exit gate**. 2.8 —
-the outbox and the `mugen.user.registered` publisher — landed this session, followed
-by a naming and logging consistency pass over the whole service.
-79 unit + 34 integration tests green (was 46 + 22).
+## Status (2026-08-03)
+Phases 0, 1 and 2 done except the **2.11 exit gate**. 2.10 (Swagger / OpenAPI)
+landed this session: springdoc 3.1.0, seven new integration tests.
+79 unit + 41 integration tests green.
 
-**Next task is 2.10 Swagger / OpenAPI**, and its first step is a compatibility
-check, not code: confirm a springdoc release built for Boot 4.1 / Framework 7
-resolves from Maven Central before designing around it. 2.x targets Boot 3.
+**Next task is the 2.11 exit gate**, which Phase 3 must not start before. Its first
+item is the one everything else waits on: the service has never actually been run.
 
 Testcontainers starts its own SQL Server and Redis, so none of this exercises the
 compose stack, and no test has ever spoken to a real broker — the outbox tests all
@@ -50,10 +48,7 @@ Not on the gate, deferred by choice:
   to delete the losing row in the catch block.
 
 ## Up next
-1. **2.10 Swagger / OpenAPI** — set up here because the shape gets copied into the
-   other ten services. Verify a Boot 4 / Framework 7 compatible springdoc release
-   exists before designing around it; 2.x targets Boot 3.
-2. **2.11 exit gate — Phase 3 does not start until all of it is ticked.** Full list
+1. **2.11 exit gate — Phase 3 does not start until all of it is ticked.** Full list
    in tasks.md. What is not yet true at all: the service has never been run
    (`docker compose up` has never been executed), SSO has never touched a real
    provider, no event has ever reached a real broker, and the regression suite has
@@ -61,7 +56,48 @@ Not on the gate, deferred by choice:
    TokenIntrospectController, none for RevocationCacheService or
    AuthorizationRequestStore, none for the profile mappers. Plus the quality review
    and the service's own Dockerfile.
-3. Phase 3 — gateway.
+   Swagger UI now makes the "exercise every endpoint" item cheaper than
+   hand-writing requests — `/swagger-ui.html` on port 8081, everything except the
+   two SSO redirects is driveable from there.
+2. Phase 3 — gateway.
+
+## Phase 2 — OpenAPI design (2026-08-03)
+- **springdoc 3.1.0, and the version line matters more than the number.** 3.x is the
+  Boot 4 line; 2.x is Boot 3 / Framework 6 and does not work here. 3.1.0's own parent
+  is `spring-boot-starter-parent:4.1.0` — this project's exact pin — so its Spring
+  dependencies resolve to what the build already has, and the tree comes out with no
+  conflicts. Confirmed by resolving it, not by reading a compatibility matrix.
+- The BOM is imported in the root pom next to `testcontainers-bom`. The ui starter
+  pulls the api starter, swagger-core and the swagger-ui webjar, and those four have
+  to agree; a per-service version property would be four chances to drift, ten times
+  over.
+- **The document is built from the same properties the service runs on.** The cookie
+  name and both token TTLs come from `RefreshCookieProperties` and `JwtProperties`,
+  not from literals in an `@OpenAPIDefinition`. An annotation can only restate them,
+  and a restatement goes stale silently — the docs would keep promising
+  `mugen_refresh` long after a rename, with nothing to catch it.
+- Two security schemes, because the service authenticates two ways. The bearer one
+  is what makes Swagger UI's "Authorize" send an `Authorization` header. The refresh
+  cookie is declared as an apiKey-in-cookie scheme even though **the UI cannot drive
+  it** — it is `HttpOnly`, so no script can set it and browsers reject `Cookie` as a
+  fetch header. Declared anyway so `/refresh` and `/logout` do not read as endpoints
+  that need no input at all.
+- `@CookieValue` parameters are `@Parameter(hidden = true)`. springdoc renders the
+  annotation's value, and the refresh cookie's name there is the literal
+  `${mugen.auth.refresh-cookie.name}` — the placeholder Spring resolves at handler
+  registration, not the resolved name. It would have been published as the cookie
+  name.
+- **No global security requirement.** It would mark `/login` and `/register` as
+  needing a token — the two calls that exist to obtain one. Requirements are per
+  class instead, and a test asserts both directions, because this failure is silent:
+  the endpoints keep working and only the documentation lies.
+- `paths-to-match: /api/v1/auth/**` keeps `/actuator` out. Operational surface is not
+  API surface and nothing codes against it.
+- **Exposure: on in dev, off in the `docker` profile, as two independent switches.**
+  The document has a plausible consumer in a deployed environment (Phase 3's gateway
+  aggregating per-service docs); the interactive UI has none, and is a login form
+  that submits real credentials. Both are env-var overridable so turning them on is
+  a deliberate per-environment act.
 
 ## Conventions — naming and logging (2026-08-02)
 Both are written in CLAUDE.md and were applied across mugen-auth and mugen-web.

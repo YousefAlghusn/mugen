@@ -106,6 +106,37 @@ spring:
     # it fails context startup with "No enum constant SerializationFeature
     # .write-dates-as-timestamps".
 
+# ---------------------------------------------------------------------------
+# OpenAPI / Swagger UI (springdoc 3.x — the Boot 4 line; 2.x targets Boot 3).
+#
+# On here, in the host-run development profile, because being able to exercise
+# the API from a browser is the whole point. The `docker` profile turns both off
+# — see application-docker.yml for that decision and its reasoning.
+#
+# The two switches are separate on purpose. The document is a machine-readable
+# contract with an obvious later consumer (the gateway aggregating every
+# service's docs, Phase 3); the UI is an interactive form that submits real
+# credentials. Wanting the first in an environment is not wanting the second.
+# ---------------------------------------------------------------------------
+springdoc:
+  api-docs:
+    enabled: ${MUGEN_API_DOCS_ENABLED:true}
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: ${MUGEN_SWAGGER_UI_ENABLED:true}
+    path: /swagger-ui.html
+    # Endpoints in declaration order would be arbitrary; alphabetical at least
+    # puts the same operation in the same place every time you look.
+    operations-sorter: alpha
+    tags-sorter: alpha
+    # Without this the UI silently drops the refresh cookie on /refresh and
+    # /logout, and both appear to do nothing when tried from the browser.
+    with-credentials: true
+  # Everything under /api/v1/auth. Keeps /actuator out of the document, which
+  # is operational surface, not API surface, and is not part of the contract
+  # any client codes against.
+  paths-to-match: /api/v1/auth/**
+
 eureka:
   client:
     service-url:

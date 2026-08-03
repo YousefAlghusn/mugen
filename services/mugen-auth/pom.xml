@@ -114,6 +114,20 @@
             <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
         </dependency>
 
+        <!-- ============================== API docs ==================================
+             springdoc 3.x, the Boot 4 line — 2.x targets Boot 3 / Framework 6 and
+             does not resolve here. Version comes from the BOM in the root pom.
+
+             The `-ui` starter rather than the `-api` one: it adds the Swagger UI
+             webjar on top, which is the point of the task. Whether it is served at
+             all is a property (springdoc.swagger-ui.enabled), so the deploy profile
+             can switch the UI off without changing the dependency set — see
+             application-docker.yml. -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+        </dependency>
+
         <!-- ============================ Shared contracts ============================ -->
         <dependency>
             <groupId>com.mugen</groupId>

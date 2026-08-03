@@ -29,6 +29,25 @@ public class SecurityConfig {
             "/api/v1/auth/sso/**"
     };
 
+    /**
+     * The OpenAPI document and Swagger UI.
+     * <p>
+     * Listed deliberately rather than left to fall under some broader rule. They are
+     * unauthenticated by nature — a spec you need a token to read is no use to the
+     * client trying to work out how to get one — so the decision to expose them has
+     * to be visible here, next to every other route decision, and not be an accident
+     * of ordering. Whether they exist at all is separate and is a property:
+     * {@code springdoc.api-docs.enabled} / {@code springdoc.swagger-ui.enabled}, off
+     * in the deploy profile. When disabled these patterns simply match nothing.
+     */
+    private static final String[] API_DOCS_ENDPOINTS = {
+            "/v3/api-docs",
+            "/v3/api-docs/**",
+            "/v3/api-docs.yaml",
+            "/swagger-ui.html",
+            "/swagger-ui/**"
+    };
+
     @Bean
     SecurityFilterChain filterChain(HttpSecurity http, JwtAuthenticationConverter jwtAuthenticationConverter)
             throws Exception {
@@ -53,6 +72,7 @@ public class SecurityConfig {
 
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(PUBLIC_ENDPOINTS).permitAll()
+                        .requestMatchers(HttpMethod.GET, API_DOCS_ENDPOINTS).permitAll()
                         // Liveness/readiness must answer before the app is warm, and
                         // Prometheus scrapes without credentials on the private network.
                         .requestMatchers(HttpMethod.GET, "/actuator/health/**", "/actuator/prometheus").permitAll()

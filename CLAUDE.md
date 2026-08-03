@@ -147,6 +147,31 @@ Logs are read during an incident by someone who is not you.
 - spring.mvc.problemdetails.enabled: true in every service
 - Never expose raw exception messages to clients
 
+## API docs (OpenAPI / Swagger)
+springdoc **3.x** — the Boot 4 line. 2.x targets Boot 3 / Framework 6 and does not
+work here. Version comes from `springdoc-openapi-bom`, imported once in the root
+pom; a service declares `springdoc-openapi-starter-webmvc-ui` with no version.
+`mugen-auth` is the reference implementation.
+
+- **Build the document from configuration, never from literals.** Cookie names,
+  TTLs and limits come from the `@ConfigurationProperties` the service actually
+  runs on, via a `@Bean OpenAPI`. An `@OpenAPIDefinition` annotation can only
+  restate them, and a restatement goes stale silently on the next rename.
+- **No global security requirement.** It marks the endpoints that exist to obtain
+  a token as requiring one. Put `@SecurityRequirement` on the classes that need
+  it, and test both directions — this failure never breaks a request, only the
+  documentation.
+- `@CookieValue` parameters are `@Parameter(hidden = true)`. springdoc publishes
+  the annotation's raw value, so a `${...}` placeholder is documented verbatim
+  instead of resolved. Describe the cookie as a security scheme instead.
+- `paths-to-match` limits the document to the service's own `/api/**`. `/actuator`
+  is operational surface, not API surface.
+- Permit the springdoc paths **explicitly** in SecurityConfig, and pin that
+  pairing with a test. Docs behind a 401 still look fine to a logged-in developer.
+- Deployed environments: `springdoc.api-docs.enabled` and
+  `springdoc.swagger-ui.enabled` are separate switches, both off in the `docker`
+  profile, both env-var overridable.
+
 ## Pagination
 - Cursor-based everywhere: { items: [], nextCursor: "..." }
 - WHERE created_at < :cursor ORDER BY created_at DESC LIMIT n

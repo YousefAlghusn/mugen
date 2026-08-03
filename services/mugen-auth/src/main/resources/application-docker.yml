@@ -35,3 +35,26 @@ management:
   otlp:
     tracing:
       endpoint: http://${JAEGER_HOST:jaeger}:${JAEGER_OTLP_HTTP_PORT:4318}/v1/traces
+
+# ---------------------------------------------------------------------------
+# API docs: OFF by default once this service is deployed. Decision, not an
+# oversight.
+#
+# Swagger UI is an interactive form that submits real credentials against
+# whatever host is serving it, and it is the one piece of this service with no
+# caller in production — clients are built against the document, not against
+# the page. Leaving it on means shipping an unauthenticated login form on every
+# instance for the benefit of nobody.
+#
+# The document itself is off with it for the same reason a deployed service does
+# not need to describe itself: it is generated at build time from this same code
+# whenever a human or a pipeline wants it. When Phase 3 has the gateway
+# aggregating per-service docs, that environment turns MUGEN_API_DOCS_ENABLED
+# back on — deliberately, per environment, which is the point of it being a
+# variable rather than a hardcoded false.
+# ---------------------------------------------------------------------------
+springdoc:
+  api-docs:
+    enabled: ${MUGEN_API_DOCS_ENABLED:false}
+  swagger-ui:
+    enabled: ${MUGEN_SWAGGER_UI_ENABLED:false}

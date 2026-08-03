@@ -38,6 +38,13 @@
         <maven-enforcer-plugin.version>3.5.0</maven-enforcer-plugin.version>
         <minimum-maven.version>3.9.0</minimum-maven.version>
         <testcontainers.version>1.20.6</testcontainers.version>
+        <!--
+            springdoc 3.x is the Boot 4 line; 2.x targets Boot 3 / Framework 6 and
+            will not work here. 3.1.0 is built against spring-boot-starter-parent
+            4.1.0 — the same version this pom inherits — so its Spring dependencies
+            are managed to exactly what the rest of the build already resolves.
+        -->
+        <springdoc.version>3.1.0</springdoc.version>
     </properties>
 
     <dependencyManagement>
@@ -58,6 +65,19 @@
                 <groupId>org.testcontainers</groupId>
                 <artifactId>testcontainers-bom</artifactId>
                 <version>${testcontainers.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <!--
+                Boot's BOM does not manage springdoc, so without this every service
+                would repeat the version and they would drift. Imported rather than
+                pinned per dependency because the ui starter, the api starter and
+                the swagger-core artifacts underneath it all have to agree.
+            -->
+            <dependency>
+                <groupId>org.springdoc</groupId>
+                <artifactId>springdoc-openapi-bom</artifactId>
+                <version>${springdoc.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
