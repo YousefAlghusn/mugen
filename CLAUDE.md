@@ -59,6 +59,27 @@ Logs are read during an incident by someone who is not you.
   stack matters. `ex.getMessage()` alone is only for expected failures whose stack
   is noise, and the code should say why.
 
+## Comments
+This is a learning project, so the reasoning stays. Its *length* is the thing to
+control — a five-line comment for a one-line claim makes code harder to read, not
+easier, and reads as noise once there are eleven services of it.
+
+- **A comment answers why.** If it restates what the line does, delete it.
+  `// Save the user` above `users.save(user)` earns nothing.
+- **One comment, one claim, three lines at most.** Needing more means it is a
+  design decision, and those belong in `docs/dev/context.md`, which exists for
+  exactly that. Leave a pointer, not the argument.
+- **Type javadoc is one sentence** — what this type is for. Not its history, not
+  the alternatives rejected, not how it fits the architecture.
+- **No fact is explained twice.** Two comments saying the same thing in different
+  files will disagree within a month. In particular: never both javadoc *and*
+  `@Operation` on an endpoint — javadoc is the source, springdoc reads it.
+- **Always worth keeping**, compressed to a line: framework traps that cost real
+  time, security reasoning ("the alternative lets anyone enumerate accounts"),
+  non-obvious constraints, and why a tempting simpler approach fails.
+- **Never a banner or a section divider.** `// ===== Services =====` in a pom or a
+  class is structure the file already has.
+
 ## Services
 - mugen-shared        (shared DTOs, Kafka contracts, utils)
 - mugen-auth          (JWT, SSO, sessions — SQL Server)
