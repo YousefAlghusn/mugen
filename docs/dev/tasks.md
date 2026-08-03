@@ -298,8 +298,13 @@ services get built from, so anything wrong here gets copied ten times.
   API docs: javadoc is the source, via springdoc's therapi integration, so an
   endpoint is documented once instead of twice. Also settled the authn/authz split
   Phase 3 needs — gateway authenticates, service authorizes, no public-endpoint list
-  at the edge (context.md). **Still owed: `./mvnw verify` — the integration suite has
-  not run since, and four new tests in `OpenApiIntegrationTest` have never executed.**
+  at the edge (context.md). `./mvnw verify` green (111 unit + 44 integration) and the
+  service re-run against the compose stack to check the derived security rules and the
+  generated document live. Two things only the real run found: javadoc's hanging indent
+  reaching the document as would-be Markdown code blocks, and there being two
+  `RequestMappingHandlerMapping` beans rather than one.
+- **Still open on this item:** library choices, layering and the deploy story have not
+  been reviewed — this pass covered comments, endpoint visibility and API docs only.
 - [ ] mugen-auth `Dockerfile` + `.dockerignore`, following `eureka-server/` as the
       template (layered jar, non-root, MaxRAMPercentage). Every service owes one
       and this is the first.

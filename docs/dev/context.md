@@ -14,9 +14,9 @@ ten more services: a written comment standard and its application, `@PublicEndpo
 the single declaration of endpoint visibility, and API docs derived from javadoc. See
 "Authn vs authz" and "Endpoint visibility" below.
 
-**111 unit tests green. The integration suite has NOT been run since that pass** — it
-needs a Docker daemon, which was not up. `./mvnw verify` is owed before this is called
-done, and four new integration tests in `OpenApiIntegrationTest` have never executed.
+**111 unit + 44 integration green (`./mvnw verify`), and the service was run against the
+compose stack afterwards** — the derived security rules and the generated document were
+both checked live, plus register/login/me/sessions/refresh/replay end to end.
 
 **mugen-auth is proven working end to end against the compose stack**: registration
 through to a `mugen.user.registered` message on a real Kafka broker, refresh
@@ -239,6 +239,21 @@ was incremental.
   hand rather than from `ProblemDetail.class`, because `code`, `traceId` and `errors` are
   set as dynamic properties and do not exist on the class — generating from the type
   documented a response nobody sends. Its `code` enum comes from `ErrorCode`.
+- **Javadoc's hanging indent leaks into the document.** Swagger UI renders descriptions
+  as Markdown, and the conventional alignment under an `@param` tag arrives verbatim —
+  runs of 6-20 leading spaces, which Markdown may read as a code block. Continuation
+  lines in any javadoc that reaches the document sit at one space. Only visible by
+  querying `/v3/api-docs`; in source the indentation looks right.
+- **Two `RequestMappingHandlerMapping` beans exist**, MVC's and actuator's, so
+  `getBean(RequestMappingHandlerMapping.class)` throws. `PublicEndpointMatcher` iterates
+  the `ObjectProvider` for exactly this reason.
+
+**Verified live, after `./mvnw verify`:** public endpoints answer 400/204/404 without a
+token and secured ones answer 401, purely from the annotation scan — no path list
+anywhere. The document carries `bearerAuth` on exactly the secured operations,
+`refreshCookie` on `/refresh` and `/logout`, and nothing on the four public ones. Summary,
+description, `@param` and record-component javadoc all reach it. Register → me → sessions
+→ refresh → replay behaves as before, replay still answering `SESSION_REPLAY_DETECTED`.
 
 **On the comment pass:** density went 31% → 27%, which is a worse headline than the
 result. Removing a comment line removes a total line too, so the ratio barely moves.
