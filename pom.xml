@@ -45,6 +45,12 @@
             are managed to exactly what the rest of the build already resolves.
         -->
         <springdoc.version>3.1.0</springdoc.version>
+        <!--
+            Lets springdoc read javadoc, so an endpoint is documented once instead of
+            twice. Version is ours because springdoc's BOM manages only its own
+            artifacts, and an annotationProcessorPath needs a literal version anyway.
+        -->
+        <therapi.version>0.15.0</therapi.version>
     </properties>
 
     <dependencyManagement>
@@ -119,6 +125,34 @@
         </pluginManagement>
 
         <plugins>
+            <!--
+                therapi's processor records javadoc into the jar, which is where
+                springdoc reads endpoint descriptions from.
+
+                Lombok is listed here because it has to be: declaring
+                annotationProcessorPaths turns off processor discovery from the
+                compile classpath, which is how Lombok ran until now. Omit it and
+                every @RequiredArgsConstructor silently stops generating.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>${lombok.version}</version>
+                        </path>
+                        <path>
+                            <groupId>com.github.therapi</groupId>
+                            <artifactId>therapi-runtime-javadoc-scribe</artifactId>
+                            <version>${therapi.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+
             <!-- Fail fast and loudly if the toolchain is not what every module assumes. -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>

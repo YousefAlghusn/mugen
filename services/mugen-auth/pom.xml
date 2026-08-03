@@ -143,6 +143,16 @@
             <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
         </dependency>
 
+        <!-- Reads back what the root pom's therapi processor recorded, so springdoc
+             can use a method's javadoc as its description. springdoc treats this as
+             optional and falls back silently when it is absent, which is why
+             OpenApiIntegrationTest asserts a javadoc string reaches the document. -->
+        <dependency>
+            <groupId>com.github.therapi</groupId>
+            <artifactId>therapi-runtime-javadoc</artifactId>
+            <version>${therapi.version}</version>
+        </dependency>
+
         <!-- ============================ Shared contracts ============================ -->
         <dependency>
             <groupId>com.mugen</groupId>
