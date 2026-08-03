@@ -6,12 +6,12 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 /**
- * @param password bounded at 72 because BCrypt operates on the first 72 <em>bytes</em>
- *                 and silently ignores the rest. Without the cap, two different long
- *                 passwords sharing a 72-byte prefix would both authenticate — and the
- *                 user would never be told their password was effectively shortened.
- *                 The lower bound follows current NIST guidance: length matters,
- *                 forced character-composition rules do not.
+ * @param username 3-50 characters; letters, digits, underscore, dot and hyphen
+ * @param email must be unique across accounts, and is matched case-insensitively
+ * @param password 8-72 characters. Capped at 72 because BCrypt hashes only the first 72
+ * bytes and silently ignores the rest, so without the cap two long passwords sharing a
+ * prefix would both authenticate. The lower bound follows NIST guidance: length matters,
+ * forced character-composition rules do not.
  */
 public record RegisterRequest(
 

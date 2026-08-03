@@ -8,8 +8,11 @@ import java.util.UUID;
 /**
  * One row in the "your active sessions" list.
  *
- * @param current whether this is the session making the request — so the UI can
- *                label it "this device" and avoid offering to revoke it by accident
+ * @param userAgent the browser the session was opened from, so an unfamiliar one is
+ * recognisable
+ * @param ipAddress the address the session was opened from
+ * @param current whether this is the session making the request, so a UI can label it
+ * "this device" rather than offer to revoke it by accident
  */
 public record SessionResponse(
         UUID id,

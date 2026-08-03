@@ -8,9 +8,10 @@ package com.mugen.auth.dto;
  * point of the cookie.
  *
  * @param accessToken to be kept in memory by the client — never localStorage or
- *                    sessionStorage, both readable by any XSS
- * @param expiresIn   seconds until the access token expires, so the client can
- *                    refresh ahead of time instead of on a failed request
+ * sessionStorage, both readable by any XSS
+ * @param tokenType always {@code Bearer}
+ * @param expiresIn seconds until the access token expires, so a client can refresh ahead
+ * of time rather than on a failed request
  */
 public record AuthResponse(String accessToken, String tokenType, long expiresIn) {
 

@@ -60,12 +60,13 @@ public class SsoController {
      *
      * <p>Nothing is created and nobody is signed in at this point.
      *
-     * @param provider    {@code google} or {@code github}
-     * @param redirectUri where to send the browser once sign-in finishes. Must match the
-     *                    configured allowlist exactly — that check is the only thing
-     *                    between this endpoint and an open redirect handing a look-alike
-     *                    site a freshly signed-in browser. Defaults to the configured
-     *                    front-end callback.
+     * <p>{@code redirect_uri} must match the configured allowlist exactly. That check is
+     * the only thing between this endpoint and an open redirect handing a look-alike site
+     * a freshly signed-in browser.
+     *
+     * @param provider {@code google} or {@code github}
+     * @param redirectUri where to send the browser once sign-in finishes; defaults to the
+     * configured front-end callback
      */
     @ApiResponse(responseCode = "302", description = "`Location` is the provider's consent screen; "
             + "`Set-Cookie` carries the browser nonce")
@@ -107,11 +108,11 @@ public class SsoController {
      * {@code /refresh} to get one into memory.
      *
      * @param provider {@code google} or {@code github}
-     * @param code     authorization code, exchanged server-side for the provider's tokens
-     * @param state    single-use and provider-bound, issued at {@code /sso/{provider}}
-     *                 and redeemed exactly once here
-     * @param error    present instead of {@code code} when the user declined consent or
-     *                 the provider refused
+     * @param code authorization code, exchanged server-side for the provider's tokens
+     * @param state single-use and provider-bound, issued at {@code /sso/{provider}} and
+     * redeemed exactly once here
+     * @param error present instead of {@code code} when the user declined consent or the
+     * provider refused
      */
     @ApiResponse(responseCode = "302", description = "Back to the application — with the refresh cookie "
             + "set, or with an `error` parameter if sign-in was refused")
