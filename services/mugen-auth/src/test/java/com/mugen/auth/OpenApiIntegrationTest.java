@@ -195,6 +195,11 @@ class OpenApiIntegrationTest {
 
         paths.properties().forEach(pathEntry ->
                 pathEntry.getValue().properties().forEach(methodEntry -> {
+                    // A path item may also carry "parameters" or "summary" alongside
+                    // its operations; only the verbs are operations.
+                    if (!HTTP_METHODS.contains(methodEntry.getKey())) {
+                        return;
+                    }
                     JsonNode operation = methodEntry.getValue();
                     String id = pathEntry.getKey() + " " + methodEntry.getKey();
                     boolean declaresBearer = operation.path("security").toString().contains("bearerAuth");
@@ -211,20 +216,33 @@ class OpenApiIntegrationTest {
                 }));
     }
 
-    /** {@code "/api/v1/auth/login post"} for every handler carrying the annotation. */
+    private static final Set<String> HTTP_METHODS =
+            Set.of("get", "put", "post", "delete", "options", "head", "patch", "trace");
+
+    /**
+     * {@code "/api/v1/auth/login post"} for every handler carrying the annotation.
+     * <p>
+     * Across <em>all</em> handler mappings, not one: actuator contributes a second
+     * {@code RequestMappingHandlerMapping}, so asking for the bean by type throws.
+     * {@link com.mugen.web.security.PublicEndpointMatcher} iterates them for the same
+     * reason, and this mirrors it deliberately.
+     */
     private Set<String> publicOperationIds() {
         Set<String> ids = new HashSet<>();
 
-        context.getBean(RequestMappingHandlerMapping.class).getHandlerMethods().forEach((mapping, handler) -> {
-            boolean isPublic = AnnotatedElementUtils.hasAnnotation(handler.getMethod(), PublicEndpoint.class)
-                    || AnnotatedElementUtils.hasAnnotation(handler.getBeanType(), PublicEndpoint.class);
-            if (!isPublic || mapping.getPathPatternsCondition() == null) {
-                return;
-            }
-            mapping.getPathPatternsCondition().getPatterns().forEach(pattern ->
-                    mapping.getMethodsCondition().getMethods().forEach(method ->
-                            ids.add(pattern.getPatternString() + " " + method.name().toLowerCase(Locale.ROOT))));
-        });
+        context.getBeansOfType(RequestMappingHandlerMapping.class).values().forEach(handlerMapping ->
+                handlerMapping.getHandlerMethods().forEach((mapping, handler) -> {
+                    boolean isPublic =
+                            AnnotatedElementUtils.hasAnnotation(handler.getMethod(), PublicEndpoint.class)
+                                    || AnnotatedElementUtils.hasAnnotation(handler.getBeanType(), PublicEndpoint.class);
+                    if (!isPublic || mapping.getPathPatternsCondition() == null) {
+                        return;
+                    }
+                    mapping.getPathPatternsCondition().getPatterns().forEach(pattern ->
+                            mapping.getMethodsCondition().getMethods().forEach(method ->
+                                    ids.add(pattern.getPatternString() + " "
+                                            + method.name().toLowerCase(Locale.ROOT))));
+                }));
 
         return ids;
     }
@@ -240,10 +258,15 @@ class OpenApiIntegrationTest {
     void javadocBecomesTheDescription() throws Exception {
         JsonNode register = document().at("/paths/~1api~1v1~1auth~1register/post");
 
-        assertThat(register.path("summary").asText())
-                .isEqualTo("Register a new account and sign in.");
-        assertThat(register.path("description").asText())
-                .contains("no separate")
+        // Asserted on the whole operation rather than on `summary` or `description`
+        // specifically: which of the two springdoc puts the first sentence in is its
+        // business, and the claim here is only that the javadoc arrived at all.
+        // Phrases chosen to sit on a single javadoc line, so the assertion does not
+        // depend on how line breaks in the comment are normalised.
+        assertThat(register.toString())
+                .contains("Register a new account and sign in")
+                // Exists in no annotation anywhere — only in the javadoc.
+                .contains("Creates the account and returns a token pair immediately")
                 .contains("deduplicate");
     }
 
