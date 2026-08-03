@@ -2,6 +2,8 @@ package com.mugen.auth;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mugen.shared.error.ErrorCode;
+import com.mugen.web.security.PublicEndpoint;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -9,17 +11,26 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
+import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers;
 import org.springframework.test.context.DynamicPropertyRegistrar;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
+import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
 import org.testcontainers.containers.MSSQLServerContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+import java.util.HashSet;
+import java.util.Locale;
+import java.util.Set;
+
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
@@ -166,19 +177,120 @@ class OpenApiIntegrationTest {
         assertThat(scheme.get("name").asText()).isEqualTo("mugen_refresh");
     }
 
+    /**
+     * The invariant, rather than a list of paths: an operation advertises
+     * {@code bearerAuth} exactly when its handler is not {@code @PublicEndpoint}.
+     * <p>
+     * Stated this way it also covers endpoints that do not exist yet, which a hand
+     * written list cannot. Obtaining a token must never itself require one, and that
+     * failure is silent — the endpoints keep working and only the docs lie.
+     */
     @Test
-    @DisplayName("token-protected endpoints carry a security requirement, public ones do not")
-    void marksWhichEndpointsNeedAToken() throws Exception {
+    @DisplayName("an operation needs a token in the document exactly when it needs one in the filter chain")
+    void documentAgreesWithTheFilterChain() throws Exception {
         JsonNode paths = document().get("paths");
 
-        assertThat(paths.at("/~1api~1v1~1auth~1me/get/security").toString()).contains("bearerAuth");
-        assertThat(paths.at("/~1api~1v1~1auth~1sessions/get/security").toString()).contains("bearerAuth");
+        Set<String> publicOperations = publicOperationIds();
+        assertThat(publicOperations).isNotEmpty();
 
-        // Obtaining a token cannot itself require one. A stray global security
-        // requirement is the usual way this breaks, and it breaks silently — the
-        // endpoints keep working, the docs just tell every reader to authenticate
-        // first for the one call that exists to make that possible.
-        assertThat(paths.at("/~1api~1v1~1auth~1login/post").has("security")).isFalse();
-        assertThat(paths.at("/~1api~1v1~1auth~1register/post").has("security")).isFalse();
+        paths.properties().forEach(pathEntry ->
+                pathEntry.getValue().properties().forEach(methodEntry -> {
+                    JsonNode operation = methodEntry.getValue();
+                    String id = pathEntry.getKey() + " " + methodEntry.getKey();
+                    boolean declaresBearer = operation.path("security").toString().contains("bearerAuth");
+
+                    if (publicOperations.contains(id)) {
+                        assertThat(declaresBearer)
+                                .as("%s is @PublicEndpoint, so it must not advertise a token", id)
+                                .isFalse();
+                    } else {
+                        assertThat(declaresBearer)
+                                .as("%s is not @PublicEndpoint, so it must advertise a token", id)
+                                .isTrue();
+                    }
+                }));
+    }
+
+    /** {@code "/api/v1/auth/login post"} for every handler carrying the annotation. */
+    private Set<String> publicOperationIds() {
+        Set<String> ids = new HashSet<>();
+
+        context.getBean(RequestMappingHandlerMapping.class).getHandlerMethods().forEach((mapping, handler) -> {
+            boolean isPublic = AnnotatedElementUtils.hasAnnotation(handler.getMethod(), PublicEndpoint.class)
+                    || AnnotatedElementUtils.hasAnnotation(handler.getBeanType(), PublicEndpoint.class);
+            if (!isPublic || mapping.getPathPatternsCondition() == null) {
+                return;
+            }
+            mapping.getPathPatternsCondition().getPatterns().forEach(pattern ->
+                    mapping.getMethodsCondition().getMethods().forEach(method ->
+                            ids.add(pattern.getPatternString() + " " + method.name().toLowerCase(Locale.ROOT))));
+        });
+
+        return ids;
+    }
+
+    /**
+     * Descriptions come from javadoc via therapi, and springdoc falls back silently
+     * when that is not wired — the document still generates, just without a word of
+     * prose in it. Asserted on a sentence that exists only in {@code AuthController}'s
+     * javadoc, never in an annotation.
+     */
+    @Test
+    @DisplayName("javadoc reaches the document, so a broken therapi setup cannot fail quietly")
+    void javadocBecomesTheDescription() throws Exception {
+        JsonNode register = document().at("/paths/~1api~1v1~1auth~1register/post");
+
+        assertThat(register.path("summary").asText())
+                .isEqualTo("Register a new account and sign in.");
+        assertThat(register.path("description").asText())
+                .contains("no separate")
+                .contains("deduplicate");
+    }
+
+    /**
+     * The half the document cannot prove: that the derived matchers actually permit and
+     * refuse the right requests. Without this the scan could return nothing at all and
+     * every assertion above would still pass.
+     */
+    @Test
+    @DisplayName("the derived matchers permit exactly the @PublicEndpoint handlers")
+    void publicEndpointsAreReachableAndTheRestAreNot() throws Exception {
+        // Reaching the handler is the claim, so these assert on what the handler does
+        // with an empty request — 400 for a missing body, 204 for a logout with no
+        // cookie. A 401 here would mean the filter chain refused before the handler ran.
+        mockMvc.perform(post("/api/v1/auth/login")).andExpect(status().isBadRequest());
+        mockMvc.perform(post("/api/v1/auth/register")).andExpect(status().isBadRequest());
+        mockMvc.perform(post("/api/v1/auth/logout")).andExpect(status().isNoContent());
+
+        // /refresh answers 401 either way, so status alone proves nothing. The problem
+        // document does: only the handler produces this code.
+        mockMvc.perform(post("/api/v1/auth/refresh"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("TOKEN_INVALID"));
+
+        mockMvc.perform(get("/api/v1/auth/me")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/auth/validate")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/auth/sessions")).andExpect(status().isUnauthorized());
+        mockMvc.perform(delete("/api/v1/auth/sessions")).andExpect(status().isUnauthorized());
+    }
+
+    /**
+     * The shared problem shape is registered once and referenced, rather than repeated
+     * per operation. {@code code} is enumerated from {@link ErrorCode}, so a new code
+     * documents itself.
+     */
+    @Test
+    @DisplayName("failures reference one reusable RFC 9457 response")
+    void declaresTheSharedProblemResponse() throws Exception {
+        JsonNode document = document();
+
+        assertThat(document.at("/components/responses/Problem/content").has("application/problem+json")).isTrue();
+
+        JsonNode problem = document.at("/components/schemas/Problem/properties");
+        assertThat(problem.has("traceId")).isTrue();
+        assertThat(problem.at("/code/enum").toString()).contains(ErrorCode.EMAIL_ALREADY_REGISTERED.name());
+
+        assertThat(document.at("/paths/~1api~1v1~1auth~1register/post/responses/409/$ref").asText())
+                .isEqualTo("#/components/responses/Problem");
     }
 }
