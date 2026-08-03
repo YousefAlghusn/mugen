@@ -9,18 +9,10 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 public class PasswordConfig {
 
     /**
-     * A delegating encoder, not a bare {@code BCryptPasswordEncoder}.
-     * <p>
-     * It stores the algorithm inline as a prefix — {@code {bcrypt}$2a$10$...} — and
-     * picks the verifier from that prefix on read. The consequence is that moving
-     * to a different algorithm later is a one-line change: new passwords are hashed
-     * with the new default while every existing {@code {bcrypt}} hash keeps
-     * verifying. A bare encoder hardcodes the choice into every stored row and
-     * makes migration a mass password reset.
-     * <p>
-     * This is why {@code users.password_hash} is 100 characters rather than the 60
-     * a raw bcrypt hash needs — the prefix has to fit, with headroom for a longer
-     * algorithm name later.
+     * Delegating, not a bare {@code BCryptPasswordEncoder}: storing the algorithm as a
+     * {@code {bcrypt}} prefix makes changing it a one-line change rather than a mass
+     * password reset. It is also why {@code users.password_hash} is 100 characters
+     * rather than bcrypt's 60 — the prefix has to fit.
      */
     @Bean
     PasswordEncoder passwordEncoder() {

@@ -12,18 +12,12 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Holds in-flight SSO authorizations, keyed by their {@code state} value.
+ * Holds in-flight SSO authorizations, keyed by {@code state}.
  * <p>
- * Redis rather than the HTTP session for the reason mugen-auth has no HTTP session
- * at all (see {@code SecurityConfig}: {@code SessionCreationPolicy.STATELESS}), and
- * because any instance behind the gateway may receive the callback for a flow a
- * different instance started.
- * <p>
- * Entries are <em>single-use</em>. That is what makes the {@code state} parameter do
- * its job: an attacker who captures a callback URL — from a browser history, a
- * referrer header, a proxy log — cannot replay it, because the first legitimate use
- * already consumed the entry. They also expire on their own, so an abandoned
- * sign-in leaves nothing behind.
+ * Redis because this service has no HTTP session, and because any instance behind the
+ * gateway may receive the callback for a flow another one started. Entries are
+ * single-use — which is what makes {@code state} work: a captured callback URL cannot
+ * be replayed, because the first legitimate use consumed it.
  */
 @Slf4j
 @Component

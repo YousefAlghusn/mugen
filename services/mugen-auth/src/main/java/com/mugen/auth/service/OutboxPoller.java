@@ -38,15 +38,13 @@ public class OutboxPoller {
     /**
      * Claims one batch, publishes it, and marks the results.
      * <p>
-     * {@code fixedDelay}, not {@code fixedRate}: the gap is measured from the end of
-     * the previous run, so a slow batch cannot have the next one start on top of it.
+     * {@code fixedDelay}, not {@code fixedRate}, so a slow batch cannot have the next
+     * one start on top of it.
      * <p>
-     * The transaction spans the Kafka round trip, which is normally a thing to avoid
-     * — but the row locks it holds are contended only by other pollers, which
-     * {@code READPAST} sends straight past, and never by the registration path, which
-     * only inserts. The wait is bounded by {@code sendTimeout} for the same reason
-     * {@link OAuthService#complete} is not transactional: an unbounded wait on someone
-     * else's availability drains the connection pool.
+     * The transaction spans the Kafka round trip, which is normally wrong. It is
+     * defensible here because the locks are contended only by other pollers, which
+     * {@code READPAST} skips, never by registration, which only inserts — and
+     * {@code sendTimeout} bounds the wait regardless.
      */
     @Scheduled(
             initialDelayString = "${mugen.outbox.poll-interval}",
@@ -58,9 +56,8 @@ public class OutboxPoller {
             return;
         }
 
-        // Sent first, waited on second. Sending the batch up front lets the producer
-        // pipeline it into one round trip; a send-then-wait loop would pay the broker
-        // latency once per event and hold the locks that much longer.
+        // Sent first, waited on second, so the producer pipelines the batch into one
+        // round trip instead of paying broker latency once per event.
         List<CompletableFuture<?>> sends = new ArrayList<>(batch.size());
         for (OutboxEvent event : batch) {
             sends.add(kafka.send(event.getTopic(), event.getMessageKey(), event.getPayloadJson()));
@@ -109,9 +106,8 @@ public class OutboxPoller {
             return false;
 
         } catch (Exception ex) {
-            // Never rethrown: one unpublishable event must not abort the batch and
-            // roll back the rows that did go out, or a single poison message would
-            // wedge the whole outbox behind it.
+            // Never rethrown: one poison event must not roll back the rows that did
+            // go out, or it would wedge the whole outbox behind it.
             event.recordFailure(describe(ex), outboxProperties.initialBackoff(), outboxProperties.maxBackoff());
 
             if (event.getAttempts() >= outboxProperties.alertAfterAttempts()) {

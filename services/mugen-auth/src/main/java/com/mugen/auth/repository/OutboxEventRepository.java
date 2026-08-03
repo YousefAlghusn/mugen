@@ -18,24 +18,15 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEvent, UUID> 
      * Claims the next batch of unpublished events for the calling transaction.
      * <p>
      * Native because the method is really its three table hints, which JPQL cannot
-     * express:
-     * <ul>
-     *   <li>{@code UPDLOCK} — lock at read time, not write time. Otherwise two
-     *       pollers read the same row and both send it.</li>
-     *   <li>{@code READPAST} — skip rows another poller holds rather than block on
-     *       them. This is what lets a second instance make progress instead of
-     *       waiting out the first one's Kafka round trip.</li>
-     *   <li>{@code ROWLOCK} — no escalation to page or table locks under a backlog,
-     *       which would block registrations inserting into this same table.</li>
-     * </ul>
-     * Postgres spells all three {@code FOR UPDATE SKIP LOCKED}, for whoever writes
-     * mugen-payment's version.
+     * express: {@code UPDLOCK} locks at read time so two pollers cannot both send a
+     * row, {@code READPAST} skips rows another poller holds instead of blocking on
+     * its Kafka round trip, and {@code ROWLOCK} stops escalation from blocking
+     * registrations inserting here. Postgres spells all three
+     * {@code FOR UPDATE SKIP LOCKED}.
      * <p>
-     * Due time comes from the database clock rather than a parameter, so pollers
-     * agree on "due" regardless of host clock skew.
-     * <p>
-     * Locks are held until the calling transaction ends — so the caller must be
-     * transactional and brief. See {@link com.mugen.auth.service.OutboxPoller}.
+     * Due time comes from the database clock, so pollers agree despite host skew.
+     * Locks are held until the caller's transaction ends — it must be transactional
+     * and brief. See {@link com.mugen.auth.service.OutboxPoller}.
      */
     @Query(value = """
             SELECT TOP (:batchSize) *
@@ -47,21 +38,16 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEvent, UUID> 
     List<OutboxEvent> claimBatch(@Param("batchSize") int batchSize);
 
     /**
-     * Retention sweep, published rows only. An event still owed to Kafka is never
-     * deleted however old or however often it has failed — that would lose it in
-     * exactly the way this table exists to prevent.
+     * Retention sweep, published rows only — an event still owed to Kafka is never
+     * deleted, however old, which is the point of the table.
      * <p>
-     * A bulk statement rather than the derived {@code deleteByPublishedAtBefore},
-     * which loads every match and removes them one at a time to fire lifecycle
-     * callbacks. Same reasoning as {@code SessionRepository.revokeAllForUserExcept}.
-     * <p>
-     * The null check reads as redundant — {@code publishedAt < :before} already
-     * excludes nulls — but SQL Server matches filtered indexes on the predicate, and
-     * stating it is what lets this use {@code ix_outbox_events_published_at}.
+     * Bulk rather than the derived {@code deleteByPublishedAtBefore}, which would load
+     * every match to fire lifecycle callbacks. The null check reads as redundant but
+     * is what lets SQL Server match the filtered index
+     * {@code ix_outbox_events_published_at}.
      */
-    // clearAutomatically, because a bulk delete goes round the persistence context:
-    // without it a row deleted here is still served from the first-level cache to
-    // anything that asks for it later in the same transaction.
+    // clearAutomatically: a bulk delete bypasses the persistence context, which would
+    // otherwise keep serving the deleted row for the rest of the transaction.
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("delete from OutboxEvent e where e.publishedAt is not null and e.publishedAt < :before")
     int deletePublishedBefore(@Param("before") Instant before);

@@ -16,13 +16,9 @@ import java.util.Map;
  * Resolves an {@link OAuthProvider} to its Spring Security {@link ClientRegistration},
  * and to the mapper that understands its user-info response.
  * <p>
- * The registration repository is looked up through an {@link ObjectProvider} because
- * it does not always exist. Spring Boot only creates one when
- * {@code spring.security.oauth2.client.registration.*} is configured, which is the
- * {@code sso} profile — and mugen-auth must still start without it. That is the same
- * rule CLAUDE.md applies to the Config Server: an optional dependency being absent
- * degrades a feature, it does not stop the service booting. The cost is paid here,
- * once, so nothing downstream has to think about it.
+ * The registration repository comes through an {@link ObjectProvider} because Boot only
+ * creates one under the {@code sso} profile, and mugen-auth must still start without it.
+ * Paid once here so nothing downstream has to think about it.
  */
 @Component
 public class OAuthClientRegistry {

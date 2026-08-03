@@ -5,20 +5,13 @@ import org.slf4j.MDC;
 import java.util.UUID;
 
 /**
- * Read access to the current request's trace id, for stamping onto RFC 9457
- * ProblemDetail bodies and structured logs.
+ * Read access to the current request's trace id, for RFC 9457 bodies and logs.
  * <p>
- * <strong>Micrometer Tracing owns the {@value #TRACE_ID_KEY} MDC key.</strong> Once a
- * service has a tracer on the classpath (this stack exports OTLP to Jaeger),
- * Micrometer populates it automatically from the inbound {@code traceparent}
- * header, or mints a new W3C id when there isn't one. This class therefore only
- * reads that value — it must not compete with the tracer to produce ids, or the
- * id in a log line would disagree with the id Jaeger recorded for the same request.
- * <p>
- * {@link #getOrCreate()} exists solely for the edge where no span is active: the
- * gateway rejecting a request in a filter that runs before tracing is established.
- * Its fallback deliberately matches the W3C trace-id shape (32 lower-case hex
- * characters) so nothing downstream has to handle two different formats.
+ * <strong>Micrometer Tracing owns the {@value #TRACE_ID_KEY} MDC key</strong> and
+ * populates it from the inbound {@code traceparent}. This class only reads it — minting
+ * ids in competition would make a log line disagree with Jaeger. {@link #getOrCreate()}
+ * covers the one edge where no span is active, and its fallback matches the W3C shape
+ * so nothing downstream sees two formats.
  */
 public final class TraceIdHolder {
 
@@ -53,9 +46,8 @@ public final class TraceIdHolder {
     }
 
     /**
-     * Must be called when the request completes. MDC is thread-local and these
-     * threads are pooled, so a missed clear leaks one request's trace id onto
-     * the next request that happens to reuse the thread.
+     * Must be called when the request completes: MDC is thread-local and the threads
+     * are pooled, so a missed clear leaks this trace id onto the next request.
      */
     public static void clear() {
         MDC.remove(TRACE_ID_KEY);

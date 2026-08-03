@@ -19,17 +19,13 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 
 /**
- * A credential-bearing account.
+ * A credential-bearing account — identity and nothing else. Display name, bio and
+ * avatar belong to mugen-user, joined by the {@code mugen.user.registered} event and
+ * never by a query.
  * <p>
- * Deliberately narrow: this is identity and nothing else. Display name, bio and
- * avatar belong to mugen-user, in a different database. The two are joined by the
- * {@code mugen.user.registered} event, never by a query.
- * <p>
- * Note what Lombok is <em>not</em> doing here. No {@code @Data}, no
- * {@code @EqualsAndHashCode}, no {@code @ToString} — identity comes from
- * {@link BaseEntity}, which handles Hibernate proxies and id-less instances
- * correctly. Setters are opt-in per field so state that must not change after
- * creation simply has no way to be changed.
+ * No {@code @Data} or {@code @EqualsAndHashCode} on purpose: identity comes from
+ * {@link BaseEntity}, and setters are opt-in per field so immutable state has no way
+ * to be changed.
  */
 @Entity
 @Table(name = "users")

@@ -12,33 +12,20 @@ import java.util.Objects;
 import java.util.UUID;
 
 /**
- * Identity for every entity in this service.
- * <p>
- * The {@code equals}/{@code hashCode} pair here is the reason this class exists at
- * all. Getting it wrong on a JPA entity is subtle and breaks quietly:
- * <ul>
- *   <li>{@code hashCode} is a constant per type, not derived from the id. An entity
- *       added to a {@code HashSet} before being persisted would otherwise change
- *       bucket the moment Hibernate assigns its id, and become unfindable in the
- *       set it is already in.</li>
- *   <li>{@code equals} returns false when the id is null, so two distinct unsaved
- *       instances are never considered the same row.</li>
- *   <li>Both unwrap {@link HibernateProxy}. A lazy association is a generated
- *       subclass, so a naive {@code getClass()} comparison finds {@code User$Proxy}
- *       != {@code User} and reports two references to the same row as unequal.</li>
- * </ul>
- * Both are {@code final}: subclasses overriding them would reintroduce exactly
- * these bugs.
+ * Identity for every entity in this service. The {@code equals}/{@code hashCode} pair
+ * is the reason it exists — each line of it fixes a quiet JPA bug: a constant
+ * {@code hashCode} so an entity does not change bucket when Hibernate assigns its id,
+ * false-on-null-id so two unsaved instances are never the same row, and unwrapping
+ * {@link HibernateProxy} so {@code User$Proxy} is not judged unequal to {@code User}.
+ * Both are {@code final} because an override reintroduces all three.
  */
 @MappedSuperclass
 public abstract class BaseEntity {
 
     /**
-     * Assigned by Hibernate as a random UUID before insert.
-     * <p>
-     * Random UUIDs scatter across the index, which is why every table declares its
-     * primary key {@code NONCLUSTERED} and clusters on {@code created_at} instead —
-     * see the migrations. Inserts then append rather than splitting pages.
+     * A random UUID assigned before insert. They scatter across the index, which is
+     * why every table declares its primary key {@code NONCLUSTERED} and clusters on
+     * {@code created_at} so inserts append rather than split pages.
      */
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)

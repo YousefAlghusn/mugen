@@ -14,17 +14,10 @@ import org.springframework.web.client.RestClientException;
 import java.util.List;
 
 /**
- * GitHub's user response, which needs more work than Google's for two reasons.
- * <p>
- * First, {@code /user} omits the email entirely when the account keeps it private —
- * that is the default for a large share of accounts, so treating a null email as
- * "no email" would break sign-in for many real users. The address is instead read
- * from {@code /user/emails}, which needs the {@code user:email} scope.
- * <p>
- * Second, GitHub has no {@code email_verified} field on {@code /user}. The
- * verification flag only exists per-address on {@code /user/emails}, so that call
- * is the only way to answer the question that decides whether this login may be
- * matched onto an existing mugen account.
+ * GitHub's user response, which needs a second call that Google's does not.
+ * {@code /user} omits a private email entirely — the default for many accounts — and
+ * carries no {@code email_verified} at all. Both live per-address on
+ * {@code /user/emails}, which needs the {@code user:email} scope.
  */
 @Slf4j
 @Component
@@ -35,9 +28,8 @@ public class GithubProfileMapper implements OAuthProfileMapper {
     private final RestClient restClient;
     private final String emailsUri;
 
-    // Explicit, because the test constructor below makes this an ambiguous choice:
-    // with two constructors and neither marked, Spring falls back to looking for a
-    // no-arg one and fails to instantiate the bean at all.
+    // Explicit: with two constructors and neither marked, Spring looks for a no-arg
+    // one and fails to instantiate the bean at all.
     @Autowired
     public GithubProfileMapper(RestClient.Builder restClientBuilder) {
         this(restClientBuilder, DEFAULT_EMAILS_URI);

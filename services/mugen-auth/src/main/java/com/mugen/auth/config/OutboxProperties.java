@@ -8,26 +8,19 @@ import org.springframework.validation.annotation.Validated;
 import java.time.Duration;
 
 /**
- * Binds {@code mugen.outbox.*}.
- * <p>
- * The poll and purge intervals are absent here on purpose: {@code @Scheduled} reads
- * them from the environment directly, so binding them again would create two
- * sources for one value.
+ * Binds {@code mugen.outbox.*}. The poll and purge intervals are deliberately absent:
+ * {@code @Scheduled} reads those from the environment, and binding them here too would
+ * make two sources for one value.
  *
- * @param batchSize          rows claimed per tick. Throughput ceiling is this over
- *                           the poll interval; raise it before shortening the tick.
- * @param sendTimeout        how long to wait for the broker's acknowledgement. Bounded
- *                           because the wait happens inside a transaction holding row
- *                           locks — an unbounded one would pin a connection until the
- *                           pool ran dry.
- * @param initialBackoff     delay before the first retry, doubling from there.
- * @param maxBackoff         backoff ceiling, so a long outage does not push the retry
- *                           of a live event days out.
- * @param alertAfterAttempts attempts after which failures log at ERROR instead of WARN.
- *                           Not a give-up threshold — nothing is ever discarded — just
- *                           where "transient" stops being a fair description.
- * @param retention          how long a published row is kept before the purge sweep
- *                           removes it. Long enough to answer "was this delivered?".
+ * @param batchSize          rows claimed per tick; raise before shortening the tick
+ * @param sendTimeout        bounded because the wait happens inside a transaction
+ *                           holding row locks
+ * @param initialBackoff     delay before the first retry, doubling from there
+ * @param maxBackoff         ceiling, so an outage does not push a live event days out
+ * @param alertAfterAttempts where failures log at ERROR rather than WARN. Not a
+ *                           give-up threshold — nothing is ever discarded
+ * @param retention          how long a published row is kept, so "was this delivered?"
+ *                           stays answerable
  */
 @Validated
 @ConfigurationProperties(prefix = "mugen.outbox")

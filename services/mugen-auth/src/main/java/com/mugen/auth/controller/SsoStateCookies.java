@@ -9,21 +9,12 @@ import org.springframework.stereotype.Component;
 import java.time.Duration;
 
 /**
- * The short-lived cookie that ties an in-flight SSO handshake to one browser.
+ * The short-lived cookie tying an in-flight SSO handshake to one browser. It carries
+ * no authority of its own and is cleared the moment the callback lands.
  * <p>
- * Note the two attributes that differ from {@link RefreshTokenCookies}, both
- * forced by what this cookie has to survive:
- * <ul>
- *   <li>{@code SameSite=Lax}, not {@code Strict}. The callback arrives as a
- *       top-level navigation <em>from the provider</em>, which is cross-site — a
- *       Strict cookie would simply not be sent, and the check it exists for could
- *       never run. Lax is sent on exactly this case (a top-level GET) and on
- *       nothing else, so it is the weakest relaxation that works.</li>
- *   <li>Path {@code /api/v1/auth/sso}, narrower than the refresh cookie's, so it is
- *       not attached to any other endpoint.</li>
- * </ul>
- * It carries no authority of its own: it proves only that this browser is the one
- * the redirect was issued to, and it is cleared the moment the callback lands.
+ * {@code SameSite=Lax}, not {@code Strict} as {@link RefreshTokenCookies} uses: the
+ * callback is a cross-site top-level navigation, on which Strict is never sent, so the
+ * check would never run. Lax covers exactly that case and nothing else.
  */
 @Component
 @RequiredArgsConstructor
@@ -38,8 +29,7 @@ public class SsoStateCookies {
 
     public ResponseCookie issue(String browserNonce) {
         return base(browserNonce)
-                // Outlives nothing: the same window in which the pending
-                // authorization is valid in Redis.
+                // The same window the pending authorization is valid for in Redis.
                 .maxAge(ssoProperties.stateTtl())
                 .build();
     }
@@ -54,8 +44,7 @@ public class SsoStateCookies {
     private ResponseCookie.ResponseCookieBuilder base(String value) {
         return ResponseCookie.from(NAME, value)
                 .httpOnly(true)
-                // Reuses the refresh cookie's setting so there is one switch for
-                // "this environment is plain HTTP", not two that can disagree.
+                // One switch for "this environment is plain HTTP", not two.
                 .secure(refreshCookieProperties.secure())
                 .path(PATH)
                 .sameSite("Lax");

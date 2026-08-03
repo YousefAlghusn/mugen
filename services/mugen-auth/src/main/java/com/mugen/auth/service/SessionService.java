@@ -39,29 +39,16 @@ public class SessionService {
     /**
      * Validates a presented refresh-token version and advances the session.
      * <p>
-     * Three outcomes, and the middle one is the point of the whole design:
-     * <ul>
-     *   <li><b>version == current</b> — the expected case. Rotate and return.</li>
-     *   <li><b>version &lt; current</b> — this token was already exchanged. Only the
-     *       holder of a copy can present a spent token, so the session is treated as
-     *       compromised and revoked entirely. Rejecting just this one request would
-     *       not help: whoever stole it may hold the newer token too, and rejecting
-     *       one call would leave them logged in.</li>
-     *   <li><b>version &gt; current</b> — a version this service never issued.
-     *       Forged, and handled the same way.</li>
-     * </ul>
-     * The row is locked for update, so two concurrent refreshes cannot both read the
-     * same version and both succeed — which would fork the session into two valid
-     * token chains with nothing to distinguish them.
+     * Any mismatch revokes the whole session, not just this request: only the holder
+     * of a copy can present a spent version, and whoever stole it may hold the newer
+     * token too. The row is locked for update so two concurrent refreshes cannot both
+     * succeed and fork the session into two valid token chains.
      *
      * @return the session, with {@code tokenVersion} already advanced
      */
-    // noRollbackFor is load-bearing, not a tidy-up. Throwing SessionReplayDetected
-    // marks the transaction for rollback, which would undo the revocation this
-    // method just performed — leaving the session live in the database while Redis
-    // (non-transactional) already reported it revoked. The attacker's stolen token
-    // would keep working until the Redis key expired 15 minutes later. The
-    // revocation is a deliberate security side effect and must outlive the throw.
+    // noRollbackFor is load-bearing: the throw would otherwise roll back the
+    // revocation just written, leaving the session live in the database while Redis
+    // already reports it revoked.
     @Transactional(noRollbackFor = AuthExceptions.SessionReplayDetected.class)
     public Session rotate(UUID sessionId, int presentedVersion) {
         Session session = sessions.findForRotation(sessionId)

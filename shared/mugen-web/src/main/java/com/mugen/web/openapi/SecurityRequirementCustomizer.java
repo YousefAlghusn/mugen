@@ -9,17 +9,13 @@ import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.web.method.HandlerMethod;
 
 /**
- * Marks every operation whose handler is not {@link PublicEndpoint} as needing a
- * bearer token, and gives it the matching 401.
+ * Marks every operation whose handler is not {@link PublicEndpoint} as needing a bearer
+ * token, and gives it the matching 401.
  * <p>
- * Derived from the same annotation the filter chain is built from, so the document
- * cannot claim an endpoint is open while the filter chain refuses it. Written by hand
- * this failure is silent — the endpoint keeps working and only the docs lie, which no
- * amount of exercising the API reveals.
- * <p>
- * A global security requirement would have been the easy alternative and is wrong: it
- * marks {@code /login} and {@code /register} as requiring the token they exist to
- * issue.
+ * Reads the same annotation the filter chain is built from, so the document cannot
+ * claim an endpoint is open while the chain refuses it — a failure that is otherwise
+ * silent, since only the docs lie. A global security requirement would be the easy
+ * alternative and is wrong: it marks {@code /login} as needing the token it issues.
  */
 public class SecurityRequirementCustomizer implements GlobalOperationCustomizer {
 

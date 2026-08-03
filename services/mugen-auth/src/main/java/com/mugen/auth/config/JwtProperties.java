@@ -9,22 +9,17 @@ import org.springframework.validation.annotation.Validated;
 import java.time.Duration;
 
 /**
- * Binds {@code mugen.jwt.*}.
- * <p>
- * A validated record rather than {@code @Value} injection: the constraints run at
- * startup, so a missing key file or a malformed TTL fails immediately with a clear
- * message instead of throwing on the first login attempt in production.
+ * Binds {@code mugen.jwt.*}. Validated, so a missing key file or malformed TTL fails
+ * at startup rather than on the first login in production.
  *
- * @param privateKey         PEM (PKCS#8) used to sign. Never leaves this service.
- * @param publicKey          PEM (X.509) — also copied to mugen-gateway to verify.
- * @param issuer             {@code iss} claim; verifiers must check it.
- * @param accessTokenTtl     short by design: the gateway checks revocation against
- *                           Redis with this same TTL, so a revoked session cannot
- *                           outlive the cache entry that records it.
- * @param refreshTokenTtl    long-lived, HttpOnly cookie, rotated on every use.
- * @param revocationCacheTtl how long a revoked sessionId stays in Redis. Must be
- *                           at least {@code accessTokenTtl}, or an access token
- *                           could outlive the record saying it was revoked.
+ * @param privateKey         PEM (PKCS#8) used to sign; never leaves this service
+ * @param publicKey          PEM (X.509), also copied to mugen-gateway to verify
+ * @param issuer             {@code iss} claim; verifiers must check it
+ * @param accessTokenTtl     short by design — it bounds how long a revoked session
+ *                           can still be honoured
+ * @param refreshTokenTtl    long-lived, HttpOnly cookie, rotated on every use
+ * @param revocationCacheTtl must be at least {@code accessTokenTtl}, or a token
+ *                           outlives the record saying it was revoked
  */
 @Validated
 @ConfigurationProperties(prefix = "mugen.jwt")

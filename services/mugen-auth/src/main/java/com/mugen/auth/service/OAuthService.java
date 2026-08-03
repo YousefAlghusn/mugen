@@ -46,19 +46,10 @@ import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * Single sign-on: the OAuth 2.0 authorization code flow, driven explicitly rather
- * than through {@code oauth2Login()}.
+ * than through {@code oauth2Login()}, whose chain ends in a servlet session mugen
+ * does not have. The protocol steps are still Spring Security's.
  * <p>
- * Spring's built-in login filter chain is built to end in an authenticated servlet
- * session. mugen has no sessions — a sign-in has to end in a mugen access token and
- * a rotating refresh cookie, exactly as {@link AuthService#login} does, so the two
- * paths converge on the same session and token machinery. Driving the flow here
- * also puts the two decisions that matter — where the browser may be sent
- * afterwards, and when a provider identity may be attached to an existing mugen
- * account — in readable code rather than in filter configuration.
- * <p>
- * The individual protocol steps are still Spring Security's: the token exchange,
- * PKCE generation and the user-info call are all its implementations, so this
- * class contains no hand-written OAuth protocol handling.
+ * Reasoning in docs/dev/context.md, "Phase 2 — SSO design".
  */
 @Slf4j
 @Service
@@ -112,8 +103,8 @@ public class OAuthService {
      * the browser that started the flow.
      * <p>
      * Separate from {@link #complete} because the caller needs the redirect target
-     * out of it before anything else can go wrong — a failure after this point is
-     * still shown to the user on their own site rather than as a bare error page.
+     * before anything else can fail — so a later failure still reaches the user on
+     * their own site rather than as a bare error page.
      *
      * @param browserNonce from the SSO cookie; the flow was issued to whoever holds it
      * @throws AuthExceptions.SsoStateInvalid if the state is missing, expired,
@@ -127,8 +118,7 @@ public class OAuthService {
         PendingAuthorization pending = pendingAuthorizations.consume(state)
                 .orElseThrow(AuthExceptions.SsoStateInvalid::new);
 
-        // Constant-time, because this compares a secret the caller supplies against
-        // one we hold — the shape of comparison that leaks through timing.
+        // Constant-time: a caller-supplied secret compared against one we hold.
         if (!StringUtils.hasText(browserNonce)
                 || !MessageDigest.isEqual(
                         browserNonce.getBytes(StandardCharsets.UTF_8),
@@ -145,10 +135,9 @@ public class OAuthService {
      * Finishes a sign-in: exchanges the code, reads the provider profile, resolves it
      * to a mugen user and issues a token pair.
      * <p>
-     * Deliberately not {@code @Transactional}. Two network calls happen here, and
-     * holding a database connection open across a third party's latency is how a
-     * connection pool gets exhausted by a provider having a slow day. Only
-     * {@link #linkOrCreate} — the part that actually writes — is transactional.
+     * Deliberately not {@code @Transactional}: two network calls happen here, and
+     * holding a connection across a provider's latency is how a pool gets exhausted.
+     * Only {@link #linkOrCreate}, which writes, is transactional.
      */
     public TokenPair complete(OAuthProvider provider,
                               PendingAuthorization pending,
@@ -156,9 +145,8 @@ public class OAuthService {
                               String state,
                               RequestContext context) {
 
-        // The state was minted for one provider. Without this, a state issued on the
-        // Google flow could be presented at the GitHub callback, and the code would
-        // then be redeemed against a registration it was never meant for.
+        // Otherwise a state issued on the Google flow could be presented at the GitHub
+        // callback, redeeming the code against a registration it was never meant for.
         if (pending.provider() != provider) {
             log.warn("SSO state was presented at another provider's callback issuedFor={} presentedAt={}",
                     pending.provider(), provider);
@@ -183,21 +171,12 @@ public class OAuthService {
      * Maps a provider identity onto a mugen account, creating one if this is a first
      * sign-in.
      * <p>
-     * The order of the checks is the security-relevant part:
-     * <ol>
-     *   <li>An existing link wins outright. It was established by an earlier
-     *       verified sign-in and is keyed on the provider's immutable account id, so
-     *       it stays correct even after the person changes their email.</li>
-     *   <li>Otherwise an email is required, and it must be one the provider has
-     *       <em>verified</em>. An unverified address is only a claim, and honouring
-     *       it would let anyone put a stranger's address on a throwaway provider
-     *       account to take over — or pre-emptively squat — the matching mugen
-     *       account.</li>
-     *   <li>A verified address matching an existing account links to it. This is
-     *       intentional: the provider has confirmed control of the mailbox that
-     *       account was registered with, which is the same proof a password reset
-     *       would rely on.</li>
-     * </ol>
+     * The order of the checks is the security-relevant part: an existing link wins
+     * outright (keyed on the provider's immutable account id, so it survives an email
+     * change); otherwise a <em>verified</em> email is required, because an unverified
+     * one is only a claim and would let anyone squat a stranger's account; and a
+     * verified address matching an existing account links to it, on the same proof a
+     * password reset relies on.
      */
     @Transactional
     public SsoUser linkOrCreate(OAuthProvider provider, OAuthUserProfile profile) {
@@ -269,9 +248,8 @@ public class OAuthService {
                                        String state,
                                        OAuthProvider provider) {
 
-        // Rebuilt rather than stored: Spring reads redirect_uri and the PKCE
-        // code_verifier back off this object when it builds the token request, so it
-        // has to carry the same values the authorization request went out with.
+        // Rebuilt rather than stored: Spring reads redirect_uri and the PKCE verifier
+        // back off this object, so it must carry what the outbound request carried.
         OAuth2AuthorizationRequest authorizationRequest =
                 authorizationRequest(registration, state, pending.codeVerifier());
 
@@ -318,10 +296,9 @@ public class OAuthService {
                                                             String codeVerifier) {
         String redirectUri = registration.getRedirectUri();
         if (redirectUri.contains("{")) {
-            // CommonOAuth2Provider's default is the template
-            // "{baseUrl}/login/oauth2/code/{registrationId}", which only Spring's own
-            // login filter resolves. Left in place it would be sent to the provider
-            // literally and fail there, with an error that points nowhere near here.
+            // CommonOAuth2Provider defaults to a template only Spring's login filter
+            // resolves. Sent literally it fails at the provider, pointing nowhere near
+            // here — so it is caught with a message that names the property.
             throw new IllegalStateException((
                     "spring.security.oauth2.client.registration.%s.redirect-uri must be an absolute URL, not the "
                             + "template %s — this flow does not run through oauth2Login() and cannot resolve it")
@@ -337,8 +314,7 @@ public class OAuthService {
 
         if (codeVerifier == null) {
             // Generates the verifier, derives the S256 challenge, and stashes the
-            // verifier in the request's attributes — which is where the token
-            // exchange later reads it from.
+            // verifier in the request attributes, where the exchange reads it back.
             OAuth2AuthorizationRequestCustomizers.withPkce().accept(builder);
         } else {
             builder.attributes(attributes -> attributes.put(PkceParameterNames.CODE_VERIFIER, codeVerifier));
@@ -350,11 +326,9 @@ public class OAuthService {
     /**
      * Finds a free username near the provider's suggestion.
      * <p>
-     * Suffixes are random rather than sequential: {@code kaneki2} would tell the next
-     * person to try that handle exactly how many accounts already share it.
-     * {@code existsByUsername} is a courtesy check — the unique index on
-     * {@code users.username} is the guarantee, and a lost race surfaces as the
-     * constraint violation {@link #linkOrCreate} already handles.
+     * Suffixes are random, not sequential: {@code kaneki2} would tell the next person
+     * how many accounts already share that handle. The unique index is the guarantee;
+     * a lost race surfaces as the violation {@link #linkOrCreate} already handles.
      */
     private String availableUsername(String suggestion) {
         if (!users.existsByUsername(suggestion)) {

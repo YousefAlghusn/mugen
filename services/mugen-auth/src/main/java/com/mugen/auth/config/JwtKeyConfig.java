@@ -26,14 +26,9 @@ import java.security.interfaces.RSAPublicKey;
 /**
  * Loads the RS256 keypair once at startup.
  * <p>
- * Asymmetric on purpose. With HS256 every service that needs to <em>verify</em> a
- * token would also hold the secret needed to <em>mint</em> one, so a read-only
- * service being compromised would let an attacker forge tokens for anybody. Here
- * only mugen-auth holds the private key; the gateway gets public.pem and can do
- * nothing but verify.
- * <p>
- * Parsing is delegated to Spring Security's {@link RsaKeyConverters} rather than
- * hand-rolled base64 stripping and {@code KeyFactory} calls.
+ * Asymmetric on purpose: under HS256 every service that verifies a token would also
+ * hold the secret to mint one, so compromising a read-only service would let an
+ * attacker forge tokens for anybody.
  */
 @Slf4j
 @Configuration(proxyBeanMethods = false)
@@ -56,13 +51,9 @@ public class JwtKeyConfig {
     }
 
     /**
-     * Signs both token types.
-     * <p>
-     * The {@code kid} is set to the key's RFC 7638 thumbprint, which is derived
-     * from the key material itself rather than invented. When the keypair is
-     * rotated the new key gets a different thumbprint automatically, so tokens
-     * signed either side of a rotation are distinguishable and a verifier holding
-     * both keys can select the right one.
+     * Signs both token types. {@code kid} is the key's RFC 7638 thumbprint, derived
+     * from the key material rather than invented, so a rotation changes it
+     * automatically and a verifier holding both keys can pick the right one.
      */
     @Bean
     JwtEncoder jwtEncoder(RSAPublicKey publicKey, RSAPrivateKey privateKey) throws Exception {
@@ -75,17 +66,12 @@ public class JwtKeyConfig {
     }
 
     /**
-     * Verifies access tokens presented to this service's protected endpoints
-     * ({@code /me}, {@code /validate}, session management).
+     * Verifies access tokens on this service's protected endpoints. {@code @Primary}
+     * because the resource server resolves its decoder by type and there are two.
      * <p>
-     * {@code @Primary} because the resource server resolves its decoder by type and
-     * there are two here. Validation beyond the default timestamp check:
-     * <ul>
-     *   <li>issuer — without it any RS256 token this key happens to verify would be
-     *       accepted, including one minted by whoever else was handed the public key;</li>
-     *   <li>token type — without it a 30-day refresh token would authenticate as a
-     *       bearer credential.</li>
-     * </ul>
+     * Beyond the timestamp check: issuer, or any RS256 token this key verifies would
+     * be accepted; and token type, or a 30-day refresh token would authenticate as a
+     * bearer credential.
      */
     @Bean
     @Primary

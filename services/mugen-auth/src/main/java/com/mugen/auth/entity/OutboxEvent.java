@@ -17,15 +17,12 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * One Kafka message owed to the broker, so that "the user was created" and "the
- * world was told" commit together. Publishing happens afterwards and may fail
- * freely — see {@code V4__create_outbox_events.sql} and
- * {@link com.mugen.auth.service.OutboxPoller}.
+ * One Kafka message owed to the broker, so "the user was created" and "the world was
+ * told" commit together. Publishing happens afterwards and may fail freely.
  * <p>
- * Not a {@link BaseEntity}: that gives domain entities a Hibernate-generated,
- * proxy-safe identity, whereas this is a queue row whose id is assigned by the
- * caller — it is also the {@code eventId} in the payload, one identifier from here
- * through to the consumer that deduplicates on it.
+ * Not a {@link BaseEntity}: this is a queue row whose id is assigned by the caller and
+ * is also the payload's {@code eventId} — one identifier through to the consumer that
+ * deduplicates on it.
  */
 @Entity
 @Table(name = "outbox_events")
@@ -69,15 +66,9 @@ public class OutboxEvent implements Persistable<UUID> {
     private String lastError;
 
     /**
-     * Tells Spring Data this row is new even though its id is not null.
-     * <p>
-     * {@code save()} picks {@code persist} or {@code merge} by asking "is the @Id
-     * null?". Here it never is — the id is assigned in the constructor, being also
-     * the {@code eventId} inside {@link #payloadJson}. Without this flag every save
-     * takes the merge branch and pays a SELECT that always misses.
-     * <p>
-     * The callback below is not optional: a stale {@code true} would make the
-     * poller's write retry the INSERT and hit the primary key.
+     * Tells Spring Data this row is new even though its id is not null — {@code save()}
+     * otherwise takes the merge branch and pays a SELECT that always misses. The
+     * callback below is not optional: a stale {@code true} would retry the INSERT.
      */
     @Transient
     private boolean isNew = true;
@@ -96,8 +87,7 @@ public class OutboxEvent implements Persistable<UUID> {
 
     /**
      * Records a message as owed. Must run inside the transaction performing the write
-     * this event describes — that is the whole point, and
-     * {@link com.mugen.auth.service.UserEventPublisher} enforces it.
+     * it describes — {@link com.mugen.auth.service.UserEventPublisher} enforces it.
      *
      * @param eventId    also the {@code eventId} inside {@code payloadJson}
      * @param messageKey Kafka partition key, so events about one aggregate stay ordered
@@ -119,9 +109,8 @@ public class OutboxEvent implements Persistable<UUID> {
     /**
      * Records a failed send and schedules the retry.
      * <p>
-     * Backoff is exponential and capped. A tight retry loop against a broker that is
-     * down turns one outage into two, and the row is in no hurry — it is durable, and
-     * the only cost of waiting is latency on an event nobody has yet.
+     * Backoff is exponential and capped: a tight retry loop against a broker that is
+     * down turns one outage into two, and the row is durable, so waiting costs little.
      */
     public void recordFailure(String error, Duration initialBackoff, Duration maxBackoff) {
         this.attempts++;
@@ -136,10 +125,9 @@ public class OutboxEvent implements Persistable<UUID> {
     /**
      * {@code initialBackoff * 2^(attempts-1)}, capped at {@code maxBackoff}.
      * <p>
-     * The comparison is done by shifting the cap down rather than the base up: a row
-     * that keeps failing reaches an attempt count where doubling overflows a long,
-     * and an overflowed backoff wraps negative — scheduling the retry in the past and
-     * turning a capped backoff into a hot loop against a broker that is already sick.
+     * Compares by shifting the cap down rather than the base up: doubling eventually
+     * overflows a long and wraps negative, scheduling the retry in the past and turning
+     * a capped backoff into a hot loop against a broker that is already sick.
      */
     static Duration backoffFor(int attempts, Duration initialBackoff, Duration maxBackoff) {
         int shift = Math.max(attempts - 1, 0);

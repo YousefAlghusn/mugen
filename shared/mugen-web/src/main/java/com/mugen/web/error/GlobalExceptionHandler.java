@@ -20,20 +20,15 @@ import java.net.URI;
 import java.util.List;
 
 /**
- * Renders every failure as an RFC 9457 {@code application/problem+json} response.
- * <p>
- * Auto-configured for all services (see {@code MugenErrorHandlingAutoConfiguration}),
- * so error responses are identical everywhere without eleven copies of this file. A
- * service that needs its own handling adds its own {@code @RestControllerAdvice}
- * with a higher {@code @Order}; anything it does not handle falls through to here.
+ * Renders every failure as an RFC 9457 {@code application/problem+json} response,
+ * auto-configured for all services. One with its own needs adds a
+ * {@code @RestControllerAdvice} at a higher {@code @Order} and falls through to here.
  */
 @Slf4j
 @RestControllerAdvice
-// Must outrank Spring Boot's own ProblemDetailsExceptionHandler, which
-// spring.mvc.problemdetails.enabled registers as a @ControllerAdvice at order 0.
-// Without this, Boot's handler claims MethodArgumentNotValidException first and
-// answers with a bare ProblemDetail — no traceId, no code, no errors[] — for
-// exactly the validation failures clients most need those fields on.
+// Must outrank Boot's own ProblemDetailsExceptionHandler at order 0, which would
+// otherwise claim MethodArgumentNotValidException and answer with a bare
+// ProblemDetail — no traceId, no code, no errors[].
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
@@ -45,25 +40,19 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     }
 
     /**
-     * Every expected failure. The exception already knows its status and code, so
-     * this stays one method instead of a handler per exception type.
+     * Every expected failure. The exception already knows its status and code, so this
+     * stays one method rather than a handler per type.
      */
     @ExceptionHandler(AppException.class)
     public ProblemDetail handleAppException(AppException ex, WebRequest request) {
-        // Expected failures are not errors in the operational sense — a wrong
-        // password is the system working. Logged at WARN without a stack trace so
-        // they do not drown out genuine faults. A 5xx AppException is a different
-        // matter and keeps its stack.
+        // A wrong password is the system working, so 4xx is WARN without a stack.
         if (ex.getStatus().is5xxServerError()) {
             log.error("Request failed errorCode={} status={} path={}",
                     ex.getErrorCode(), ex.getStatus().value(), request.getDescription(false), ex);
         } else {
-            // The message is deliberately absent, on the same rule as the 4xx
-            // framework exceptions below: these messages are built out of the
-            // caller's own input. EmailAlreadyRegistered names the address that was
-            // rejected, which is fine in the response — the caller just typed it —
-            // and permanent in Loki. The code and the path say what happened, and
-            // the traceId ties the line to the response that carries the detail.
+            // No message, on the same rule as the framework 4xx below: these are built
+            // from the caller's input. EmailAlreadyRegistered names the address, which
+            // is fine in the response and permanent in Loki.
             log.warn("Request failed errorCode={} status={} path={}",
                     ex.getErrorCode(), ex.getStatus().value(), request.getDescription(false));
         }
@@ -71,12 +60,9 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     }
 
     /**
-     * Anything that is not an {@link AppException} is a bug, not a handled case.
-     * <p>
-     * The real message is logged with its stack trace but deliberately withheld from
-     * the response: raw exception text leaks table names, file paths and library
-     * versions. The client gets the traceId, which is enough to correlate with the
-     * log entry that has the detail.
+     * Anything that is not an {@link AppException} is a bug. The real message is logged
+     * but withheld from the response — raw exception text leaks table names, file paths
+     * and library versions. The traceId is enough to correlate.
      */
     @ExceptionHandler(Exception.class)
     public ProblemDetail handleUnexpected(Exception ex) {
@@ -96,8 +82,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 .map(fieldError -> new ValidationError(fieldError.getField(), fieldError.getDefaultMessage()))
                 .toList();
 
-        // Field names only. The rejected value is whatever the caller typed, which
-        // for this service is routinely an email address or a password.
+        // Field names only — the rejected value is routinely an email or a password.
         log.warn("Request validation failed fields={}", errors.stream().map(ValidationError::field).toList());
 
         ProblemDetail body = problem(HttpStatus.BAD_REQUEST, ErrorCode.VALIDATION_FAILED,
@@ -108,17 +93,13 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     }
 
     /**
-     * The one funnel every exception Spring MVC handles itself passes through — 405,
-     * 415, a malformed JSON body, a missing request parameter, no handler found.
+     * The one funnel for everything Spring MVC handles itself — 405, 415, a malformed
+     * body, no handler found. Without this they answered with a {@code traceId} that
+     * appeared in no log line at all.
      * <p>
-     * Without this they answered with a {@code traceId} that appeared in no log line
-     * anywhere, so the id a user quotes to support led to nothing.
-     * <p>
-     * 4xx is logged without {@code ex.getMessage()} on purpose. Spring builds those
-     * messages from the offending input — {@code HttpMessageNotReadableException}
-     * quotes the request body back, which on this service is a registration payload
-     * with a password in it. The type and the path say what went wrong without
-     * copying the credential into Loki.
+     * 4xx logs the exception type, never its message: Spring builds those from the
+     * offending input, and {@code HttpMessageNotReadableException} quotes the request
+     * body — here a registration payload with a password in it.
      */
     @Override
     protected ResponseEntity<Object> handleExceptionInternal(Exception ex,
@@ -157,8 +138,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         body.setType(URI.create(ERROR_TYPE_BASE + code.name().toLowerCase().replace('_', '-')));
         body.setTitle(status.getReasonPhrase());
         body.setProperty("code", code.name());
-        // Always present, per CLAUDE.md — it is the only handle a user can give
-        // support to find the corresponding server-side log entry.
+        // Always present — the only handle a user can give support to find the log line.
         body.setProperty("traceId", TraceIdHolder.getOrCreate());
         return body;
     }

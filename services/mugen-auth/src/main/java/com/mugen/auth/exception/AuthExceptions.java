@@ -9,22 +9,15 @@ import com.mugen.web.error.UnauthorizedException;
 import java.util.UUID;
 
 /**
- * mugen-auth's typed failures, on top of the shared hierarchy in mugen-web.
- * <p>
- * Grouped as nested classes because they are small, closely related, and always
- * read together — a reader gets the whole failure vocabulary of this service in one
- * screen rather than eight near-empty files.
+ * mugen-auth's typed failures, on top of the shared hierarchy in mugen-web. Nested so
+ * the whole failure vocabulary of the service reads in one screen.
  */
 public final class AuthExceptions {
 
     private AuthExceptions() {
     }
 
-    /**
-     * Deliberately says "email or password", never which one was wrong. Telling the
-     * caller that the email exists but the password failed turns login into an
-     * account-enumeration oracle.
-     */
+    /** Never says which of the two was wrong — that would be an enumeration oracle. */
     public static class InvalidCredentials extends UnauthorizedException {
         public InvalidCredentials() {
             super(ErrorCode.INVALID_CREDENTIALS, "Invalid email or password.");
@@ -70,9 +63,8 @@ public final class AuthExceptions {
     }
 
     /**
-     * The account exists and the credential was right, but the account is switched
-     * off. Separate from {@link InvalidCredentials} because there is no enumeration
-     * risk left to protect against — the caller has already proved they own it.
+     * Separate from {@link InvalidCredentials}: the caller has already proved they own
+     * the account, so there is no enumeration risk left to protect against.
      */
     public static class AccountDisabled extends UnauthorizedException {
         public AccountDisabled() {
@@ -80,10 +72,7 @@ public final class AuthExceptions {
         }
     }
 
-    /**
-     * The provider is known to the code but has no client credentials configured, so
-     * no {@code ClientRegistration} exists for it — see the {@code sso} profile.
-     */
+    /** Known to the code but with no credentials configured — see the {@code sso} profile. */
     public static class SsoProviderNotConfigured extends ResourceNotFoundException {
         public SsoProviderNotConfigured(String provider) {
             super(ErrorCode.SSO_PROVIDER_NOT_CONFIGURED,
@@ -92,11 +81,8 @@ public final class AuthExceptions {
     }
 
     /**
-     * The {@code state} on a callback did not match a pending authorization.
-     * <p>
-     * Expected for a stale bookmark or a back-button replay, since state is
-     * single-use — but it is also exactly what a forged callback looks like, which
-     * is the reason state exists. Both are refused identically.
+     * The callback's {@code state} matched no pending authorization. A stale bookmark
+     * and a forged callback look identical here, and are refused identically.
      */
     public static class SsoStateInvalid extends UnauthorizedException {
         public SsoStateInvalid() {
@@ -112,9 +98,8 @@ public final class AuthExceptions {
     }
 
     /**
-     * The provider returned no usable email address — GitHub does this when every
-     * address on the account is private and the {@code user:email} scope was denied.
-     * An account cannot be created without one: mugen-user keys off it.
+     * No usable email — GitHub does this when every address is private and
+     * {@code user:email} was denied. mugen-user keys off it, so an account needs one.
      */
     public static class SsoEmailUnavailable extends BusinessRuleException {
         public SsoEmailUnavailable(String provider) {
@@ -124,12 +109,8 @@ public final class AuthExceptions {
     }
 
     /**
-     * The provider shared an email it has not verified.
-     * <p>
-     * Refused rather than trusted, because an unverified address is only a claim.
-     * If it were honoured, anyone could put someone else's address on a throwaway
-     * provider account and either take over the matching mugen account or squat the
-     * address before its real owner registers.
+     * Refused, not trusted: an unverified address is only a claim, and honouring one
+     * would let anyone take over or pre-emptively squat the matching mugen account.
      */
     public static class SsoEmailNotVerified extends BusinessRuleException {
         public SsoEmailNotVerified(String provider) {
@@ -147,10 +128,8 @@ public final class AuthExceptions {
     }
 
     /**
-     * Post-login redirect target was not on the allowlist. Without this check the
-     * SSO entry point is an open redirect: an attacker sends a victim to a genuine
-     * mugen URL and has us bounce them to a look-alike site — carrying, worse, a
-     * freshly minted session.
+     * Without this check the SSO entry point is an open redirect, bouncing a victim
+     * from a genuine mugen URL to a look-alike site with a freshly minted session.
      */
     public static class SsoRedirectNotAllowed extends BusinessRuleException {
         public SsoRedirectNotAllowed(String redirectUri) {
@@ -159,12 +138,8 @@ public final class AuthExceptions {
     }
 
     /**
-     * Raised when a refresh token arrives carrying an already-rotated version.
-     * <p>
-     * The message stays generic on purpose. Confirming to the caller that replay was
-     * detected tells an attacker their captured token was spent and that they should
-     * move faster next time; the useful detail belongs in the log and the audit
-     * trail, not the response.
+     * A refresh token arrived at an already-rotated version. The message stays generic
+     * on purpose: confirming detection tells an attacker their captured token was spent.
      */
     public static class SessionReplayDetected extends UnauthorizedException {
         public SessionReplayDetected() {

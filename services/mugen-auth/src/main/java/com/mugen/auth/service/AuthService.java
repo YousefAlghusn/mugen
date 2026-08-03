@@ -17,11 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Locale;
 
-/**
- * Registration, login and refresh. Orchestrates {@link UserRepository},
- * {@link SessionService} and {@link JwtService} — holds no token or session logic
- * of its own.
- */
+/** Registration, login and refresh. Holds no token or session logic of its own. */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -37,10 +33,9 @@ public class AuthService {
     /**
      * Creates an account and logs it straight in.
      * <p>
-     * The uniqueness pre-checks are for a decent error message, not for correctness:
-     * two concurrent registrations can both pass them. The unique indexes from V1
-     * are the actual guarantee, which is why the insert is wrapped — losing that
-     * race must surface as a 409, not a 500.
+     * The pre-checks buy a decent error message, not correctness — two concurrent
+     * registrations can both pass them. V1's unique indexes are the real guarantee,
+     * so losing that race must surface as a 409 rather than a 500.
      */
     @Transactional
     public TokenPair register(String username, String email, String rawPassword, RequestContext context) {
@@ -82,8 +77,7 @@ public class AuthService {
         User user = users.findByEmail(normalise(email))
                 .orElseThrow(AuthExceptions.InvalidCredentials::new);
 
-        // An SSO-only account has no hash. Comparing against null would throw, and
-        // more importantly there is nothing valid to compare against.
+        // An SSO-only account has no hash to compare against.
         if (!user.hasPassword() || !passwordEncoder.matches(rawPassword, user.getPasswordHash())) {
             throw new AuthExceptions.InvalidCredentials();
         }
@@ -101,11 +95,9 @@ public class AuthService {
      * token, so a role granted or revoked mid-session takes effect here instead of
      * being frozen in for the token's remaining lifetime.
      */
-    // noRollbackFor must be repeated here, not only on SessionService.rotate.
-    // rotate() joins this transaction rather than starting its own, so when
-    // SessionReplayDetected propagates out, this outer boundary applies its own
-    // rollback rules — and the default would discard the revocation that rotate()
-    // just wrote. Both levels have to agree for the security side effect to commit.
+    // noRollbackFor must be repeated here, not only on SessionService.rotate: rotate()
+    // joins this transaction, so this outer boundary decides whether the revocation
+    // it wrote commits. Both levels have to agree.
     @Transactional(noRollbackFor = AuthExceptions.SessionReplayDetected.class)
     public TokenPair refresh(String refreshToken) {
         RefreshTokenClaims claims = jwtService.parseRefreshToken(refreshToken);
@@ -123,10 +115,8 @@ public class AuthService {
     /**
      * Ends one session. The gateway stops honouring its access token via Redis.
      * <p>
-     * Does not rotate: possession of a verifiable refresh token for the session is
-     * enough to end it, and revocation is idempotent. Routing logout through
-     * rotation would mean a user who clicks logout twice, or whose retry arrives
-     * late, trips replay detection on a session they were closing anyway.
+     * Deliberately does not rotate: a double-clicked logout would otherwise trip
+     * replay detection on a session that was being closed anyway.
      */
     @Transactional
     public void logout(String refreshToken) {
@@ -135,14 +125,11 @@ public class AuthService {
     }
 
     /**
-     * Opens a session for an already-authenticated user and mints its first token
-     * pair.
+     * Opens a session for an already-authenticated user and mints its first tokens.
      * <p>
-     * Public because {@link OAuthService} ends its flow here too. Whoever calls this
-     * has taken on the job of proving the user is who they say they are — a password
-     * check, or a completed provider handshake. Everything after that point must be
-     * identical for both, or the two sign-in routes would drift into producing
-     * differently-shaped sessions.
+     * Public because {@link OAuthService} ends its flow here too — the caller has
+     * already proved identity, and both sign-in routes must converge here or they
+     * drift into producing differently-shaped sessions.
      */
     @Transactional
     public TokenPair issueTokens(User user, RequestContext context) {

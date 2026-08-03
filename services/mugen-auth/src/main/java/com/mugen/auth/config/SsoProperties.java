@@ -17,17 +17,12 @@ import java.util.List;
  * Security's own {@code spring.security.oauth2.client.*} and live in the
  * {@code sso} profile.
  *
- * @param stateTtl            how long a pending authorization survives in Redis.
- *                            Minutes, not hours: it only has to cover the time a
- *                            human spends on a consent screen, and every extra
- *                            minute is extra window for a forged callback.
- * @param defaultRedirectUri  where the callback sends the browser when the caller
- *                            did not ask for anywhere in particular.
- * @param allowedRedirectUris the complete set of post-login targets. An allowlist
- *                            and not a pattern: this is the one check standing
- *                            between {@code /sso/google?redirect_uri=...} and an
- *                            open redirect that hands a look-alike site a freshly
- *                            signed-in browser.
+ * @param stateTtl            minutes, not hours — it need only cover a consent
+ *                            screen, and every extra minute widens the window for a
+ *                            forged callback
+ * @param defaultRedirectUri  used when the caller asked for nowhere in particular
+ * @param allowedRedirectUris an allowlist, not a pattern: the one check between
+ *                            {@code ?redirect_uri=} and an open redirect
  */
 @Validated
 @ConfigurationProperties(prefix = "mugen.auth.sso")
@@ -41,9 +36,8 @@ public record SsoProperties(
     public SsoProperties {
         allowedRedirectUris = allowedRedirectUris == null ? List.of() : List.copyOf(allowedRedirectUris);
 
-        // Caught at startup rather than on the first sign-in: a default that is not
-        // itself allowed makes every SSO attempt that omits redirect_uri fail, which
-        // is the common case and would otherwise only show up in production.
+        // A default that is not itself allowed breaks every sign-in omitting
+        // redirect_uri — the common case, so it is caught at startup.
         if (defaultRedirectUri != null && !allowedRedirectUris.isEmpty()
                 && !allowedRedirectUris.contains(defaultRedirectUri)) {
             throw new IllegalArgumentException(
