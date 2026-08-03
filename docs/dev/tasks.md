@@ -290,6 +290,16 @@ services get built from, so anything wrong here gets copied ten times.
       especially — it is pure branching over a response shape).
 - [ ] **Quality review pass over the whole service** — library choices, layering,
       error handling, DevEx, deploy story. Fix findings, do not defer them.
+- **Partly done 2026-08-03**, on the three things that would have been copied ten
+  times. Comments: a written standard in CLAUDE.md, then applied — blocks of 12+
+  lines down from 38 to 18. Endpoint visibility: `@PublicEndpoint` on the handler is
+  now the only declaration, replacing the `PUBLIC_ENDPOINTS` array, the per-class
+  `@SecurityRequirement` and the test that hand-listed paths to pin them together.
+  API docs: javadoc is the source, via springdoc's therapi integration, so an
+  endpoint is documented once instead of twice. Also settled the authn/authz split
+  Phase 3 needs — gateway authenticates, service authorizes, no public-endpoint list
+  at the edge (context.md). **Still owed: `./mvnw verify` — the integration suite has
+  not run since, and four new tests in `OpenApiIntegrationTest` have never executed.**
 - [ ] mugen-auth `Dockerfile` + `.dockerignore`, following `eureka-server/` as the
       template (layered jar, non-root, MaxRAMPercentage). Every service owes one
       and this is the first.
@@ -306,7 +316,15 @@ services get built from, so anything wrong here gets copied ten times.
 ### 3.2 Config
 - [ ] PublicKeyConfig (load RSAPublicKey bean from public.pem)
 - [ ] RouteConfig (all service routes defined)
-- [ ] SecurityConfig (public vs protected routes list)
+- [ ] SecurityConfig — **no public-vs-protected route list.** Decided 2026-08-03: the
+      gateway authenticates (verify RS256, check Redis revocation, reject a bad token)
+      and the service authorizes. "Is this endpoint public?" is an authorization
+      question, answered only by `@PublicEndpoint` in the service. A request with no
+      token is forwarded with no identity and the service's default-deny refuses it.
+      See context.md, "Authn vs authz" — including why a `/public-api` URL convention
+      was considered and rejected.
+- [ ] Strip client-supplied identity headers (`X-User-*`) on the way in, so a caller
+      cannot forge one
 - [ ] RateLimitConfig (token bucket config per route)
 
 ### 3.3 Filters (order matters)

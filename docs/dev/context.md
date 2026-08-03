@@ -5,10 +5,18 @@ and git history do NOT already say: live status, decisions and their reasoning,
 and traps worth not rediscovering.
 
 ## Status (paused 2026-08-03)
-Phases 0, 1 and 2 done except four items on the **2.11 exit gate**. This session:
-2.10 (Swagger / OpenAPI, springdoc 3.1.0) landed, and then **mugen-auth ran for the
-first time** — which is where the session's real value was, see "First real run"
-below. 80 unit + 41 integration tests green.
+Phases 0, 1 and 2 done except four items on the **2.11 exit gate**. Earlier this day:
+2.10 (Swagger / OpenAPI, springdoc 3.1.0) landed and **mugen-auth ran for the first
+time** — see "First real run" below.
+
+Since then, a quality pass over the three things mugen-auth would otherwise copy into
+ten more services: a written comment standard and its application, `@PublicEndpoint` as
+the single declaration of endpoint visibility, and API docs derived from javadoc. See
+"Authn vs authz" and "Endpoint visibility" below.
+
+**111 unit tests green. The integration suite has NOT been run since that pass** — it
+needs a Docker daemon, which was not up. `./mvnw verify` is owed before this is called
+done, and four new integration tests in `OpenApiIntegrationTest` have never executed.
 
 **mugen-auth is proven working end to end against the compose stack**: registration
 through to a `mugen.user.registered` message on a real Kafka broker, refresh
@@ -165,6 +173,78 @@ Not on the gate, deferred by choice:
   aggregating per-service docs); the interactive UI has none, and is a login form
   that submits real credentials. Both are env-var overridable so turning them on is
   a deliberate per-environment act.
+
+## Authn vs authz — who decides what (2026-08-03)
+Settled before the gateway exists, because building it the other way would create the
+duplication this decision avoids. **The gateway authenticates; the service authorizes.**
+
+- **Authentication** — is this credential genuine, and whose is it? Signature, expiry,
+  issuer, token type, and the Redis revocation check. Done at the gateway, and again in
+  each service, which stays a resource server: a service must not depend on the gateway
+  having been honest.
+- **Authorization** — may this identity do *this*? Whether the endpoint needs a login at
+  all, role checks, ownership checks. Service only.
+
+The load-bearing observation: **"is this endpoint public?" is an authorization
+question.** That is why the gateway never needs a public-endpoint list — it was never
+its question, and answering it would require a map of all eleven services' endpoints.
+A request with no token is forwarded with no identity and the service's default-deny
+refuses it; a request with a *bad* token is rejected at the gateway, which needs no list.
+
+Considered and rejected: a `/public-api` URL namespace, so both tiers could derive the
+answer from the path. Three reasons. The refresh cookie is scoped `Path=/api/v1/auth`
+deliberately, and `/refresh` and `/logout` are public endpoints that need it — a
+separate namespace would force widening that scope. Visibility would become part of the
+URL contract, so making something public later is a breaking change. And it fits badly
+where one resource has mixed visibility, which is most of mugen-post, feed, search and
+user. Prefix matching on raw paths is also where Spring Security bypasses live
+(CVE-2024-38819, CVE-2025-41242); matching a resolved handler has no such bug class.
+
+**Direction is not negotiable: default-deny.** Forget to mark an endpoint and it is
+secured, which breaks loudly in development. The inverse fails open and leaks silently.
+
+Still open, unchanged by this: whether mugen-auth should enforce revocation itself
+(2.11). Separable, and deliberately not folded into a cleanup pass.
+
+## Endpoint visibility, and docs from javadoc (2026-08-03)
+Three copies of one fact became one. "This endpoint needs no token" was written in
+`SecurityConfig`'s `PUBLIC_ENDPOINTS` array, in per-class `@SecurityRequirement`, and in
+a test hand-listing paths to pin the two together. Now: `@PublicEndpoint` on the handler,
+read by `PublicEndpointMatcher` to build the permit rules and by
+`SecurityRequirementCustomizer` to mark the document.
+
+- **Method-level, not class-level**, even on controllers whose whole surface is public
+  today. Class-level would silently expose the next endpoint added to `AuthController`.
+- **The matcher resolves on first request**, not in its constructor. It is injected into
+  the `SecurityFilterChain` bean, and reading `RequestMappingHandlerMapping` there forces
+  Spring MVC to initialise mid-security-configuration.
+- The springdoc and actuator paths stay literal patterns — not our handlers, nothing to
+  annotate.
+
+**Javadoc is now the API documentation**, via springdoc's therapi integration. The prose
+previously existed twice, verbatim: a javadoc block and an `@Operation(description=...)`
+saying the same thing. A swagger annotation still wins where both exist, so the migration
+was incremental.
+
+- **Lombok had to be added to `annotationProcessorPaths`.** Declaring that element turns
+  off processor discovery from the compile classpath, which is how Lombok ran until now —
+  Boot's parent only sets `<parameters>true</parameters>`. Omitting it stops every
+  `@RequiredArgsConstructor` generating, everywhere, at once.
+- The therapi version is ours to pin (0.15.0): springdoc's BOM manages only springdoc's
+  own artifacts, and an `annotationProcessorPath` needs a literal version anyway.
+- **springdoc falls back silently when therapi is missing** — the document still
+  generates, just with no prose. Hence the test asserting a javadoc sentence reaches it.
+- The shared `Problem` response is registered once in `components` and referenced by
+  `$ref`, replacing five-line `@Content`/`@Schema` blocks per operation. Described by
+  hand rather than from `ProblemDetail.class`, because `code`, `traceId` and `errors` are
+  set as dynamic properties and do not exist on the class — generating from the type
+  documented a response nobody sends. Its `code` enum comes from `ErrorCode`.
+
+**On the comment pass:** density went 31% → 27%, which is a worse headline than the
+result. Removing a comment line removes a total line too, so the ratio barely moves.
+Blocks of 12 lines or more — the actual complaint — went 38 → 18, and most of the
+remaining 18 are no longer commentary: they are Swagger operation descriptions and
+`@param` lists that are now schema field documentation.
 
 ## Conventions — naming and logging (2026-08-02)
 Both are written in CLAUDE.md and were applied across mugen-auth and mugen-web.
