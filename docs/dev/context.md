@@ -24,11 +24,17 @@ rotation, replay detection, Flyway against real SQL Server, Eureka registration.
 That claim could not be made before this session and is the point of the gate.
 
 ### Resuming
-Nothing is half-finished — the tree is clean and every test passes. To pick up:
+Nothing is half-finished — the tree is clean and `./mvnw verify` is green. To pick up:
 
-1. `docker compose up -d` (all 14 containers verified working; ~1 min to healthy)
-2. `cd services/mugen-auth && ../../mvnw spring-boot:run`
-3. http://localhost:8081/swagger-ui.html, or `http/auth.http`
+1. Start Docker Desktop first; the daemon is not running on boot, and Testcontainers
+   and compose both need it. `docker info` answering is the check.
+2. `docker compose up -d` (all 14 containers verified working; ~1 min to healthy)
+3. `cd services/mugen-auth && ../../mvnw spring-boot:run`
+4. http://localhost:8081/swagger-ui.html, or `http/auth.http`
+
+`spring-boot:run` leaves a process holding port 8081 after the Maven run is killed — if a
+restart fails with "Port 8081 was already in use", find it with
+`Get-NetTCPConnection -LocalPort 8081 -State Listen` and stop that PID.
 
 If the shared modules changed since the last run, `./mvnw install -DskipTests -pl
 shared/mugen-shared,shared/mugen-web` first — running a service alone resolves them
@@ -38,10 +44,14 @@ from the local repo, and a stale jar shadows source changes silently.
 Four items, in the order they are worth doing:
 
 1. **Regression suite holes** — no controller tests for AuthController /
-   SessionController / TokenIntrospectController, none for RevocationCacheService or
-   AuthorizationRequestStore, none for the Google/GitHub profile mappers (GitHub's
-   private-email fallback especially — pure branching over a response shape).
-2. **Decide the revocation question** below, then the quality review pass.
+   SessionController, none for RevocationCacheService or AuthorizationRequestStore, none
+   for the Google/GitHub profile mappers (GitHub's private-email fallback especially —
+   pure branching over a response shape). TokenIntrospectController and both SSO
+   endpoints are now covered at the filter-chain level by `OpenApiIntegrationTest`, but
+   only for reachability, not behaviour.
+2. **Decide the revocation question** below, then finish the quality review. The review
+   is part-done: comments, endpoint visibility and API docs were covered (see "Endpoint
+   visibility" below). **Untouched: library choices, layering, and the deploy story.**
 3. **`Dockerfile` + `.dockerignore`**, following `eureka-server/` as the template.
 4. **SSO against real Google and GitHub apps** — the only item that needs something
    this project cannot produce for itself: real client credentials and the callback
@@ -123,18 +133,15 @@ Not on the gate, deferred by choice:
   to delete the losing row in the catch block.
 
 ## Up next
-1. **2.11 exit gate — Phase 3 does not start until all of it is ticked.** Full list
-   in tasks.md. What is not yet true at all: the service has never been run
-   (`docker compose up` has never been executed), SSO has never touched a real
-   provider, no event has ever reached a real broker, and the regression suite has
-   known holes — no controller tests for AuthController / SessionController /
-   TokenIntrospectController, none for RevocationCacheService or
-   AuthorizationRequestStore, none for the profile mappers. Plus the quality review
-   and the service's own Dockerfile.
-   Swagger UI now makes the "exercise every endpoint" item cheaper than
-   hand-writing requests — `/swagger-ui.html` on port 8081, everything except the
-   two SSO redirects is driveable from there.
-2. Phase 3 — gateway.
+1. **2.11 exit gate — Phase 3 does not start until all of it is ticked.** Full list in
+   tasks.md; four items remain, in the order given under "What is left on the 2.11 gate"
+   above. Swagger UI makes the endpoint sweep cheap — `/swagger-ui.html` on port 8081
+   drives everything except the two SSO redirects.
+2. Phase 3 — gateway. **Read "Authn vs authz" below before writing 3.2's SecurityConfig**:
+   it must NOT hold a public-vs-protected route list, and the reasoning matters more than
+   the rule. `@PublicEndpoint`, `PublicEndpointMatcher` and the OpenAPI customizers
+   already live in `mugen-web`, so the gateway and every later service inherit them by
+   adding the dependency.
 
 ## Phase 2 — OpenAPI design (2026-08-03)
 - **springdoc 3.1.0, and the version line matters more than the number.** 3.x is the
