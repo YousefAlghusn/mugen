@@ -16,6 +16,48 @@ Testcontainers starts its own SQL Server and Redis, so none of this exercises th
 compose stack, and no test has ever spoken to a real broker — the outbox tests all
 mock `KafkaTemplate`. Both are on the 2.11 gate.
 
+## First real run (2026-08-03) — what it caught
+`docker compose up -d` and `spring-boot:run`, both for the first time. Infra came up
+clean: 14 containers healthy, all three init one-shots exit 0, `mugen_auth` created,
+seven topics, four buckets. The service found two things no test could.
+
+- **`KafkaTemplate` bean missing — the service would not start at all.** The Boot 4
+  autoconfiguration split again, third instance: `spring-kafka` gives you the class,
+  `spring-boot-kafka` gives you `KafkaAutoConfiguration`. Fixed by adding the module.
+  Worth understanding why the suite was blind to it: `OutboxPollerTest` mocks the
+  template, and every integration test sets `mugen.outbox.enabled=false` because it
+  has no broker — so nothing ever asked the context for the real bean. **Any service
+  that publishes to Kafka needs `spring-boot-kafka`.**
+- **A real email address in a log line.** `GlobalExceptionHandler` logged
+  `ex.getMessage()` on 4xx, and `EmailAlreadyRegistered` formats the address into its
+  message, so a duplicate registration wrote `mugenuser@mugen.dev` into the log. The
+  message is right for the response — the caller typed it — and permanent in Loki.
+  Now logged as `errorCode` + `path`, matching the rule the same class already
+  applied to framework 4xx, and guarded by a test. The 2026-08-02 naming pass fixed
+  direct log statements and missed this indirect path entirely.
+
+Verified working end to end: register/login/refresh/logout, `/me`, `/validate`,
+sessions list and revoke, rotation, replay detection, validation `errors[]`, the
+405/415/400 framework paths each leaving a log line, Flyway's 4 migrations against
+real SQL Server, Eureka registration (204), and **the outbox all the way to Kafka** —
+`published_at` set on the first attempt, and the message's `eventId` equal to the
+table's row id, which is what a consumer deduplicates on.
+
+**Open finding, not yet decided: revocation is not enforced by mugen-auth itself.**
+After a replay revoked the session, `/validate` correctly answered 401 but
+`/sessions` still answered 200 — the resource server trusts the signature, and only
+`/validate` consults Redis. That is the documented design (the gateway does the
+check, auth stays zero-DB-calls), and behind the gateway it is airtight. But it means
+a revoked session can still list and revoke sessions for up to the access token's TTL
+on any path that reaches mugen-auth directly. Decide at the 2.11 quality review
+whether the gateway alone is enough.
+
+Two Windows notes: `docker exec` with container paths must be run from PowerShell —
+MSYS rewrites `/opt/...` into `C:/Program Files/Git/opt/...` and the exec fails
+(`MSYS_NO_PATHCONV=1` also works). And the refresh cookie is `Secure`, which browsers
+accept on localhost but curl does not, so curl must replay the cookie by hand rather
+than use a cookie jar.
+
 ## Toolchain on this machine
 - JDK 21: `C:\Users\youse\.jdks\ms-21.0.12` (Microsoft OpenJDK, via IntelliJ)
 - No `java` or `mvn` on PATH — use `.\mvnw.cmd` with `JAVA_HOME` set to the above.
@@ -176,6 +218,9 @@ belongs here is only why they exist.
 Boot 4 split autoconfiguration into one module per technology. The library class
 being on the classpath no longer means its autoconfiguration is:
 - `spring-boot-flyway` — without it migrations silently never run.
+- `spring-boot-kafka` — without it there is no `KafkaTemplate` bean, and any service
+  with a component that injects one fails to start. `spring-kafka` alone is not
+  enough; it carries the class, not the autoconfiguration.
 - `spring-boot-restclient` — without it there is no `RestClient.Builder` bean at
   all, though `RestClient` sits in spring-web. Inject the bean rather than
   `RestClient.create()`: it carries the service's Jackson config, including

@@ -151,6 +151,32 @@ class GlobalExceptionHandlerTest {
                 .doesNotContain("password");
     }
 
+    /**
+     * The mirror of the test above, for the path that is ours rather than Spring's.
+     * <p>
+     * An {@code AppException}'s message is routinely built out of the caller's input
+     * — {@code EmailAlreadyRegistered} formats the address into it — so logging it
+     * verbatim put a real email address in the log on the first run against a live
+     * service. It belongs in the response, which the person who typed it reads, and
+     * nowhere near Loki, which keeps it forever.
+     */
+    @Test
+    @DisplayName("an AppException is logged by code and path, never by echoing its message")
+    void appExceptionMessageIsNotEchoedIntoTheLog() throws Exception {
+        ListAppender<ILoggingEvent> logged = captureHandlerLogs();
+
+        mockMvc.perform(get("/test/conflict-with-email"))
+                .andExpect(status().isConflict())
+                // The client is still told exactly what happened.
+                .andExpect(jsonPath("$.detail").value("Email someone@example.com is already registered."));
+
+        assertThat(logged.list).hasSize(1);
+        assertThat(logged.list.getFirst().getFormattedMessage())
+                .contains("EMAIL_ALREADY_REGISTERED")
+                .contains("/test/conflict-with-email")
+                .doesNotContain("someone@example.com");
+    }
+
     private static ListAppender<ILoggingEvent> captureHandlerLogs() {
         Logger logger = (Logger) LoggerFactory.getLogger(GlobalExceptionHandler.class);
         ListAppender<ILoggingEvent> appender = new ListAppender<>();
@@ -170,6 +196,13 @@ class GlobalExceptionHandlerTest {
         @org.springframework.web.bind.annotation.GetMapping("/test/conflict")
         void conflict() {
             throw new ConflictException(ErrorCode.EMAIL_ALREADY_REGISTERED, "Email taken.");
+        }
+
+        /** Message shaped like the real one: the caller's own address formatted in. */
+        @org.springframework.web.bind.annotation.GetMapping("/test/conflict-with-email")
+        void conflictWithEmail() {
+            throw new ConflictException(ErrorCode.EMAIL_ALREADY_REGISTERED,
+                    "Email someone@example.com is already registered.");
         }
 
         @org.springframework.web.bind.annotation.GetMapping("/test/boom")

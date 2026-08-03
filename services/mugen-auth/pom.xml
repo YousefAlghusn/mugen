@@ -89,7 +89,22 @@
             <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
 
-        <!-- ================================= Kafka ================================== -->
+        <!-- ================================= Kafka ==================================
+             The same Boot 4 modularisation as spring-boot-flyway and
+             spring-boot-restclient above, and it bites hardest here: spring-kafka
+             gives you KafkaTemplate the class, but KafkaAutoConfiguration — the
+             thing that turns spring.kafka.* into an actual KafkaTemplate bean —
+             ships separately in spring-boot-kafka. Without it the context fails at
+             startup on OutboxPoller's missing KafkaTemplate.
+
+             Every test missed this: OutboxPollerTest mocks the template, and the
+             integration tests set mugen.outbox.enabled=false because they have no
+             broker, so nothing ever asked the context for the real bean. It
+             surfaced on the first actual run. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-kafka</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.springframework.kafka</groupId>
             <artifactId>spring-kafka</artifactId>

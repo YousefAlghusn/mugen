@@ -49,16 +49,23 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
      * this stays one method instead of a handler per exception type.
      */
     @ExceptionHandler(AppException.class)
-    public ProblemDetail handleAppException(AppException ex) {
+    public ProblemDetail handleAppException(AppException ex, WebRequest request) {
         // Expected failures are not errors in the operational sense — a wrong
         // password is the system working. Logged at WARN without a stack trace so
         // they do not drown out genuine faults. A 5xx AppException is a different
         // matter and keeps its stack.
         if (ex.getStatus().is5xxServerError()) {
-            log.error("Request failed errorCode={} status={}", ex.getErrorCode(), ex.getStatus().value(), ex);
+            log.error("Request failed errorCode={} status={} path={}",
+                    ex.getErrorCode(), ex.getStatus().value(), request.getDescription(false), ex);
         } else {
-            log.warn("Request failed errorCode={} status={}: {}",
-                    ex.getErrorCode(), ex.getStatus().value(), ex.getMessage());
+            // The message is deliberately absent, on the same rule as the 4xx
+            // framework exceptions below: these messages are built out of the
+            // caller's own input. EmailAlreadyRegistered names the address that was
+            // rejected, which is fine in the response — the caller just typed it —
+            // and permanent in Loki. The code and the path say what happened, and
+            // the traceId ties the line to the response that carries the detail.
+            log.warn("Request failed errorCode={} status={} path={}",
+                    ex.getErrorCode(), ex.getStatus().value(), request.getDescription(false));
         }
         return problem(ex.getStatus(), ex.getErrorCode(), ex.getMessage());
     }

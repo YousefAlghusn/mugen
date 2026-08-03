@@ -127,6 +127,12 @@ for the next.
       BusinessRule / Forbidden / Unauthorized)
 - [x] GlobalExceptionHandler (RFC 9457 ProblemDetail + traceId + errors[])
 - [x] AuthExceptions — mugen-auth's typed failures
+- [x] (fix, 2026-08-03) **`handleAppException` no longer logs `ex.getMessage()` on
+      4xx.** The first live run wrote a real email address into the log, because
+      `EmailAlreadyRegistered` formats the address into its message and the handler
+      logged that message verbatim. Right in the response, permanent in Loki. Now
+      logged as `errorCode` + `path` — the same rule the class already applied to
+      framework 4xx one method below — and pinned by a `ListAppender` test.
 - **Deviation:** these live in a new `shared/mugen-web` module and are
   auto-configured, NOT copied per service. Eleven copies of the same classes is
   eleven places for the error contract to drift. Services still get "one
@@ -233,21 +239,44 @@ shape it takes gets copied into the other ten.
 Not a checklist of nice-to-haves. mugen-auth is the template the other ten
 services get built from, so anything wrong here gets copied ten times.
 
-- [ ] **Actually run the service.** `docker compose up -d`, then
+- [x] **Actually run the service.** `docker compose up -d`, then
       `cd services/mugen-auth && ../../mvnw spring-boot:run`. Passing tests are
       not the same claim: Testcontainers starts its own SQL Server and Redis and
       tears them down, so as of the pause nothing has ever run against the
       compose stack, and `docker compose up` has never been executed at all.
       This is the first real test of the KRaft broker, the init scripts, Eureka
       registration and the host-vs-container address split in `.env`.
-- [ ] **Exercise every endpoint against the running service** — register, login,
+- **Done 2026-08-03, and it earned its place on this list.** Infra came up clean —
+  14 containers healthy, three init one-shots exit 0, database/topics/buckets all
+  created. The service did not: no `KafkaTemplate` bean, because Boot 4 ships
+  `KafkaAutoConfiguration` in `spring-boot-kafka`, not `spring-kafka`. The suite
+  could not have caught it — the poller test mocks the template and every
+  integration test disables the outbox. Flyway applied 4 migrations against real
+  SQL Server; Eureka registration returned 204. See context.md for the full list.
+- [x] **Exercise every endpoint against the running service** — register, login,
       refresh, logout, sessions list/revoke, /me, /validate. `http/auth.http`
       (Phase 11.1) is the natural artifact; pull it forward to here.
-- [ ] **Watch one event go all the way to Kafka.** Register a user, then confirm
+- **`http/auth.http` written and the sweep run by hand.** All of the above plus the
+  401/405/415/400 paths, validation `errors[]`, duplicate-email 409, rotation and
+  replay detection. Replay behaved exactly as designed: 401
+  `SESSION_REPLAY_DETECTED` and the session revoked. Caught a second bug on the way
+  — a real email address in a log line, see 2.6 below.
+- [x] **Watch one event go all the way to Kafka.** Register a user, then confirm
       the row in `outbox_events` gets `published_at` set and the message lands on
       `mugen.user.registered` (`kafka-console-consumer`). Every outbox test mocks
       the broker, so the poller has never spoken to a real one — this is also the
       first check that the payload is readable to a consumer that is not us.
+- **Worked first attempt.** `published_at` set with `attempts=0`, and the payload's
+  `eventId` is byte-for-byte the table's row id — the assigned-id design doing the
+  job it was chosen for. Payload is plain JSON with no `__TypeId__` header, so a
+  consumer binds mugen-shared's record by configuration as intended.
+- [ ] **Decide whether mugen-auth should enforce revocation itself.** Found while
+      exercising replay: with the session revoked, `/validate` answers 401 but
+      `/sessions` still answers 200, because the resource server only verifies the
+      signature and only `/validate` consults Redis. That is the documented design
+      — the gateway does the check and auth stays free of per-request lookups — and
+      behind the gateway it is airtight. The question is whether "the gateway is the
+      only entry point" is a strong enough guarantee to rest a revocation on.
 - [ ] **Run the SSO flow against a real Google and a real GitHub app.** It has
       never touched a provider: token exchange and user-info are stubbed in every
       test and the `sso` profile has never been activated, so

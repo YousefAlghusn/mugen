@@ -1,0 +1,287 @@
+### mugen-auth — every endpoint, in the order they make sense.
+#
+# Direct to the service on 8081. Once Phase 3 exists this becomes the gateway's
+# port; the paths do not change.
+#
+# Two things this file relies on that are easy to miss:
+#
+#   1. The refresh token is never in a response body. It arrives as an HttpOnly
+#      cookie and the IDE's cookie jar replays it — which is why /refresh and
+#      /logout below send no body and still work. If they 401, the cookie jar is
+#      empty: run Login again.
+#   2. {{accessToken}} is captured by the response handler on register/login and
+#      held in the client's global store, so every request below picks it up
+#      without copy-paste. It expires after 15 minutes; run Refresh.
+#
+# Swagger UI covers the same ground interactively: http://localhost:8081/swagger-ui.html
+
+@host = http://localhost:8081
+@api = {{host}}/api/v1/auth
+
+### ---------------------------------------------------------------------------
+### Health — is it even up? Answer this before debugging anything below.
+### ---------------------------------------------------------------------------
+GET {{host}}/actuator/health
+Accept: application/json
+
+### ---------------------------------------------------------------------------
+### Register. 201, and the only call that also writes a mugen.user.registered
+### row to the outbox — see the outbox section at the bottom.
+###
+### Re-running this as-is gives 409: the email is taken. Change it, or use Login.
+### ---------------------------------------------------------------------------
+POST {{api}}/register
+Content-Type: application/json
+
+{
+  "username": "mugenuser",
+  "email": "mugenuser@mugen.dev",
+  "password": "correct-horse-battery"
+}
+
+> {%
+    client.global.set("accessToken", response.body.accessToken);
+    client.test("201 with a bearer token", function () {
+        client.assert(response.status === 201, "expected 201, got " + response.status);
+        client.assert(response.body.tokenType === "Bearer");
+    });
+    client.test("refresh token is NOT in the body", function () {
+        client.assert(response.body.refreshToken === undefined,
+            "refresh token must travel as a cookie only");
+    });
+%}
+
+### ---------------------------------------------------------------------------
+### Login. Same token pair, new session — the one above is untouched.
+### ---------------------------------------------------------------------------
+POST {{api}}/login
+Content-Type: application/json
+
+{
+  "email": "mugenuser@mugen.dev",
+  "password": "correct-horse-battery"
+}
+
+> {%
+    client.global.set("accessToken", response.body.accessToken);
+    client.test("200 with a bearer token", function () {
+        client.assert(response.status === 200, "expected 200, got " + response.status);
+    });
+%}
+
+### ---------------------------------------------------------------------------
+### Wrong password. Must be indistinguishable from an unknown email — if these
+### two differ in any way, login has become an account-enumeration oracle.
+### ---------------------------------------------------------------------------
+POST {{api}}/login
+Content-Type: application/json
+
+{
+  "email": "mugenuser@mugen.dev",
+  "password": "not-the-password"
+}
+
+> {%
+    client.test("401 INVALID_CREDENTIALS", function () {
+        client.assert(response.status === 401, "expected 401, got " + response.status);
+        client.assert(response.body.code === "INVALID_CREDENTIALS");
+    });
+    client.test("problem document carries a traceId", function () {
+        client.assert(response.body.traceId !== undefined,
+            "traceId is what a user quotes to support — it must always be present");
+    });
+%}
+
+### Unknown email. Compare the body to the one above: they must match.
+POST {{api}}/login
+Content-Type: application/json
+
+{
+  "email": "nobody-here@mugen.dev",
+  "password": "not-the-password"
+}
+
+### ---------------------------------------------------------------------------
+### Validation. 400 with errors[] naming each field — and note what the response
+### does NOT contain: the password that was rejected.
+### ---------------------------------------------------------------------------
+POST {{api}}/register
+Content-Type: application/json
+
+{
+  "username": "no",
+  "email": "not-an-email",
+  "password": "short"
+}
+
+> {%
+    client.test("400 with per-field errors", function () {
+        client.assert(response.status === 400, "expected 400, got " + response.status);
+        client.assert(response.body.errors.length === 3, "expected 3 field errors");
+    });
+%}
+
+### ---------------------------------------------------------------------------
+### Who am I. Read off the token, no database call.
+### ---------------------------------------------------------------------------
+GET {{api}}/me
+Authorization: Bearer {{accessToken}}
+
+> {%
+    client.global.set("sessionId", response.body.sessionId);
+    client.test("200 with userId, sessionId and roles", function () {
+        client.assert(response.status === 200, "expected 200, got " + response.status);
+        client.assert(response.body.roles.indexOf("ROLE_USER") >= 0);
+    });
+%}
+
+### No token at all — 401 from the resource server, before any controller runs.
+GET {{api}}/me
+
+### A tampered token. Same length, one character changed in the signature.
+GET {{api}}/me
+Authorization: Bearer eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJub3BlIn0.notarealsignature
+
+### ---------------------------------------------------------------------------
+### Is this token still good? 200 usable, 401 revoked. Empty body either way.
+### ---------------------------------------------------------------------------
+GET {{api}}/validate
+Authorization: Bearer {{accessToken}}
+
+### ---------------------------------------------------------------------------
+### Sessions. One row per device; `current` marks the one making the call.
+### Run Login a few times first to get more than one.
+### ---------------------------------------------------------------------------
+GET {{api}}/sessions
+Authorization: Bearer {{accessToken}}
+
+> {%
+    client.test("the calling session is flagged current", function () {
+        client.assert(response.status === 200, "expected 200, got " + response.status);
+        client.assert(response.body.filter(s => s.current).length === 1,
+            "exactly one session must be marked current");
+    });
+%}
+
+### ---------------------------------------------------------------------------
+### Refresh. No body — the cookie is the credential.
+###
+### Rotates: the previous refresh token is dead the moment this returns. Run it
+### twice in a row and both succeed, because each response replaces the cookie.
+### ---------------------------------------------------------------------------
+POST {{api}}/refresh
+
+> {%
+    client.global.set("accessToken", response.body.accessToken);
+    client.test("200 with a fresh access token", function () {
+        client.assert(response.status === 200, "expected 200, got " + response.status);
+    });
+%}
+
+### ---------------------------------------------------------------------------
+### Replay. THE security test of this service.
+###
+### Cannot be driven from here — the cookie jar always holds the newest cookie,
+### so there is no way to re-present the spent one. To see it:
+###   1. Login, and copy the mugen_refresh value out of the Set-Cookie header
+###   2. Refresh (the copied token is now spent)
+###   3. Send the request below with that copied value pasted in
+###
+### Expect 401 SESSION_REPLAY_DETECTED — and then confirm the real consequence:
+### GET /sessions with the current access token also fails, because detecting
+### replay revokes the whole session rather than just refusing the one call.
+### ---------------------------------------------------------------------------
+POST {{api}}/refresh
+Cookie: mugen_refresh=PASTE_A_SPENT_REFRESH_TOKEN_HERE
+
+### ---------------------------------------------------------------------------
+### Revoke one session — "sign that device out". Needs a sessionId from the list
+### above; {{sessionId}} is the caller's own, so this is a self-logout.
+### ---------------------------------------------------------------------------
+DELETE {{api}}/sessions/{{sessionId}}
+Authorization: Bearer {{accessToken}}
+
+### Sign out everywhere else. Spares the calling session on purpose.
+DELETE {{api}}/sessions
+Authorization: Bearer {{accessToken}}
+
+### ---------------------------------------------------------------------------
+### Logout. 204 always, including with no cookie at all — logout must not be
+### able to fail, or a client is left believing it is still signed in.
+### ---------------------------------------------------------------------------
+POST {{api}}/logout
+
+> {%
+    client.test("204 no content", function () {
+        client.assert(response.status === 204, "expected 204, got " + response.status);
+    });
+%}
+
+### Again, with the cookie now cleared. Still 204.
+POST {{api}}/logout
+
+### ---------------------------------------------------------------------------
+### Method and content-type refusals. Worth running once: these are the paths
+### Spring MVC handles itself, and they answer with a traceId that has to appear
+### in a log line — the handleExceptionInternal override is what makes it.
+### ---------------------------------------------------------------------------
+GET {{api}}/login
+
+###
+POST {{api}}/login
+Content-Type: text/plain
+
+not json
+
+###
+POST {{api}}/login
+Content-Type: application/json
+
+{ "email": "unterminated
+
+### ---------------------------------------------------------------------------
+### SSO — NOT runnable from here, by design.
+###
+### These are browser navigation targets, not JSON calls: the response is a 302
+### to Google, the user consents there, and the provider drives the callback.
+### An HTTP client following redirects proves nothing.
+###
+### Open in a real browser, with the service started under -Dspring-boot.run.profiles=sso:
+###   http://localhost:8081/api/v1/auth/sso/google
+###   http://localhost:8081/api/v1/auth/sso/github
+###
+### Without the sso profile there are no client credentials, so no provider is
+### registered and both answer 404 — which the request below confirms.
+### ---------------------------------------------------------------------------
+GET {{api}}/sso/google
+
+### An unknown provider gets exactly the same 404 as a configured-but-off one,
+### so the URL space cannot be probed for which providers exist.
+GET {{api}}/sso/myspace
+
+### ---------------------------------------------------------------------------
+### The outbox, end to end. Not an HTTP call — run these after Register.
+###
+### Run them in PowerShell, not Git Bash. MSYS rewrites any argument that looks
+### like a Unix path, so /opt/kafka/... becomes C:/Program Files/Git/opt/kafka/...
+### inside the container and the exec fails. Prefix with MSYS_NO_PATHCONV=1 if you
+### want them in Git Bash anyway.
+###
+### 1. The row, and whether the poller has published it yet:
+###
+###    docker exec -i mugen-sqlserver /opt/mssql-tools18/bin/sqlcmd -C \
+###      -S localhost -U sa -P 'ChangeMe_Str0ng!' -d mugen_auth \
+###      -Q "SELECT TOP 5 id, event_type, published_at, attempts FROM outbox_events ORDER BY created_at DESC"
+###
+###    published_at NULL after a few seconds means the poller cannot reach the
+###    broker — check attempts and the service log.
+###
+### 2. The message itself, as a consumer that is not us would see it:
+###
+###    docker exec -i mugen-kafka /opt/kafka/bin/kafka-console-consumer.sh \
+###      --bootstrap-server localhost:29092 \
+###      --topic mugen.user.registered --from-beginning --max-messages 1
+###
+###    The payload's eventId must equal the row's id — that is the whole point of
+###    the assigned id, and it is what a consumer deduplicates on.
+### ---------------------------------------------------------------------------
