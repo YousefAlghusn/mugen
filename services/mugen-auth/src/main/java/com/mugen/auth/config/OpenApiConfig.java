@@ -1,5 +1,6 @@
 package com.mugen.auth.config;
 
+import com.mugen.web.openapi.MugenApiDocs;
 import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Info;
@@ -26,11 +27,12 @@ import org.springframework.context.annotation.Configuration;
 public class OpenApiConfig {
 
     /**
-     * The scheme behind Swagger UI's "Authorize" button. HTTP bearer with the
-     * {@code JWT} bearer format, which is what makes the UI send
-     * {@code Authorization: Bearer <token>} rather than prompting for a raw header.
+     * The scheme behind Swagger UI's "Authorize" button — HTTP bearer, {@code JWT}
+     * format, which is what makes the UI send {@code Authorization: Bearer <token>}.
+     * Named in mugen-web because {@code SecurityRequirementCustomizer} attaches this
+     * same name to every secured operation.
      */
-    public static final String BEARER_SCHEME = "bearerAuth";
+    public static final String BEARER_SCHEME = MugenApiDocs.BEARER_SCHEME;
 
     /**
      * The refresh token. Documented as a cookie scheme rather than a parameter

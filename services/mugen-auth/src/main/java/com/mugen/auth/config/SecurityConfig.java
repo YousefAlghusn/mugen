@@ -1,5 +1,7 @@
 package com.mugen.auth.config;
 
+import com.mugen.web.security.PublicEndpoint;
+import com.mugen.web.security.PublicEndpointMatcher;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -20,25 +22,12 @@ import java.util.List;
 @EnableWebSecurity
 public class SecurityConfig {
 
-    /** Endpoints reachable without a token — the ones used to *obtain* one. */
-    private static final String[] PUBLIC_ENDPOINTS = {
-            "/api/v1/auth/register",
-            "/api/v1/auth/login",
-            "/api/v1/auth/refresh",
-            "/api/v1/auth/logout",
-            "/api/v1/auth/sso/**"
-    };
-
     /**
-     * The OpenAPI document and Swagger UI.
-     * <p>
-     * Listed deliberately rather than left to fall under some broader rule. They are
-     * unauthenticated by nature — a spec you need a token to read is no use to the
-     * client trying to work out how to get one — so the decision to expose them has
-     * to be visible here, next to every other route decision, and not be an accident
-     * of ordering. Whether they exist at all is separate and is a property:
-     * {@code springdoc.api-docs.enabled} / {@code springdoc.swagger-ui.enabled}, off
-     * in the deploy profile. When disabled these patterns simply match nothing.
+     * The OpenAPI document and Swagger UI. Listed here rather than annotated because
+     * they are springdoc's handlers, not ours — there is nothing to put
+     * {@link PublicEndpoint} on. Whether they exist at all is a property
+     * ({@code springdoc.api-docs.enabled} / {@code springdoc.swagger-ui.enabled}, off
+     * in the deploy profile); when disabled these patterns match nothing.
      */
     private static final String[] API_DOCS_ENDPOINTS = {
             "/v3/api-docs",
@@ -49,8 +38,9 @@ public class SecurityConfig {
     };
 
     @Bean
-    SecurityFilterChain filterChain(HttpSecurity http, JwtAuthenticationConverter jwtAuthenticationConverter)
-            throws Exception {
+    SecurityFilterChain filterChain(HttpSecurity http,
+                                    JwtAuthenticationConverter jwtAuthenticationConverter,
+                                    PublicEndpointMatcher publicEndpointMatcher) throws Exception {
 
         return http
                 // No server-side session: the token is the whole state. Spring must
@@ -71,7 +61,9 @@ public class SecurityConfig {
                 .cors(cors -> cors.disable())
 
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(PUBLIC_ENDPOINTS).permitAll()
+                        // Derived from the @PublicEndpoint handlers themselves, so an
+                        // endpoint's visibility is stated where the endpoint is.
+                        .requestMatchers(publicEndpointMatcher).permitAll()
                         .requestMatchers(HttpMethod.GET, API_DOCS_ENDPOINTS).permitAll()
                         // Liveness/readiness must answer before the app is warm, and
                         // Prometheus scrapes without credentials on the private network.

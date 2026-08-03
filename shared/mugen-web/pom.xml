@@ -44,6 +44,28 @@
             <optional>true</optional>
         </dependency>
 
+        <!--
+            For @PublicEndpoint and its matcher. Optional on the same reasoning as
+            the two above: a service that has no filter chain does not gain one by
+            depending on this module.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!--
+            For the OpenAPI customizers. Optional like the rest: a service that
+            publishes no document never sees these beans, because the
+            auto-configuration is conditional on these very classes.
+        -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-common</artifactId>
+            <optional>true</optional>
+        </dependency>
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>

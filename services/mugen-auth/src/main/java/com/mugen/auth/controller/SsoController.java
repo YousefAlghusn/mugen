@@ -6,10 +6,9 @@ import com.mugen.auth.exception.AuthExceptions;
 import com.mugen.auth.oauth.PendingAuthorization;
 import com.mugen.auth.service.OAuthService;
 import com.mugen.web.error.AppException;
-import io.swagger.v3.oas.annotations.Operation;
+import com.mugen.web.openapi.MugenApiDocs;
+import com.mugen.web.security.PublicEndpoint;
 import io.swagger.v3.oas.annotations.Parameter;
-import io.swagger.v3.oas.annotations.media.Content;
-import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
@@ -17,7 +16,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.CookieValue;
@@ -31,23 +29,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 import java.net.URI;
 import java.util.Locale;
 
-/**
- * The two browser-facing endpoints of the SSO flow.
- * <p>
- * Both answer with a redirect rather than a body, because the only thing that ever
- * calls them is a browser following a link. That also decides how failures are
- * reported: once the flow is under way the user is mid-navigation, so a refusal
- * sends them back to their own application with an {@code error} parameter instead
- * of rendering raw JSON at them. Requests that are broken before the flow starts —
- * an unknown provider, a missing or forged {@code state} — do get the service's
- * normal RFC 9457 response, since those indicate a bad client rather than a user
- * whose sign-in did not work out.
- * <p>
- * Note what the success redirect does <em>not</em> carry: the access token. Only the
- * refresh cookie is set, and the application calls {@code /refresh} to get an access
- * token into memory. A token in a redirect URL would be written to browser history,
- * sent onward in {@code Referer}, and logged by every proxy in between.
- */
+/** The two browser-facing endpoints of the SSO flow. */
 @Slf4j
 @RestController
 @RequestMapping("/api/v1/auth/sso")
@@ -70,31 +52,31 @@ public class SsoController {
     private final SsoStateCookies ssoStateCookies;
 
     /**
-     * Sends the browser to the provider's consent screen.
+     * Start sign-in — redirects to the provider's consent screen.
      *
-     * @param redirectUri optional post-login target; must be on the allowlist
+     * <p>Point a browser here. The 302 carries the provider's authorization URL, with
+     * PKCE and a single-use {@code state}, and sets a short-lived {@code SameSite=Lax}
+     * nonce cookie binding the rest of the flow to this browser.
+     *
+     * <p>Nothing is created and nobody is signed in at this point.
+     *
+     * @param provider    {@code google} or {@code github}
+     * @param redirectUri where to send the browser once sign-in finishes. Must match the
+     *                    configured allowlist exactly — that check is the only thing
+     *                    between this endpoint and an open redirect handing a look-alike
+     *                    site a freshly signed-in browser. Defaults to the configured
+     *                    front-end callback.
      */
-    @Operation(summary = "Start sign-in — redirects to the provider's consent screen",
-            description = """
-                    Point a browser here. The 302 carries the provider's authorization URL, \
-                    with PKCE and a single-use `state`, and sets a short-lived `SameSite=Lax` \
-                    nonce cookie that binds the rest of the flow to this browser.
-
-                    Nothing is created and nobody is signed in at this point.""")
-    @ApiResponse(responseCode = "302", description = "`Location` is the provider's consent screen; `Set-Cookie` carries the browser nonce")
-    @ApiResponse(responseCode = "404", description = "Unknown provider, or one with no credentials configured — the same answer for both, so the URL space cannot be probed for which providers exist but are switched off",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+    @ApiResponse(responseCode = "302", description = "`Location` is the provider's consent screen; "
+            + "`Set-Cookie` carries the browser nonce")
+    @ApiResponse(responseCode = "404", description = "Unknown provider, or one with no credentials "
+            + "configured — the same answer for both, so the URL space cannot be probed for which "
+            + "providers exist but are switched off", ref = MugenApiDocs.PROBLEM_REF)
     @ApiResponse(responseCode = "422", description = "`redirect_uri` is not on the allowlist",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+            ref = MugenApiDocs.PROBLEM_REF)
+    @PublicEndpoint
     @GetMapping("/{provider}")
-    public ResponseEntity<Void> start(@Parameter(description = "`google` or `github`", example = "google")
-                                      @PathVariable String provider,
-                                      @Parameter(description = """
-                                              Where to send the browser once sign-in finishes. Must match the \
-                                              configured allowlist exactly — this check is the only thing between \
-                                              this endpoint and an open redirect that would hand a look-alike \
-                                              site a freshly signed-in browser. Defaults to the configured \
-                                              front-end callback.""")
+    public ResponseEntity<Void> start(@Parameter(example = "google") @PathVariable String provider,
                                       @RequestParam(name = "redirect_uri", required = false) String redirectUri) {
 
         OAuthService.SsoRedirect redirect = oauthService.begin(providerOf(provider), redirectUri);
@@ -106,51 +88,45 @@ public class SsoController {
     }
 
     /**
-     * Where the provider sends the browser back.
-     * <p>
-     * The state is redeemed first, before anything else is attempted, for two
-     * reasons: it is single-use, so it must be spent whether or not the rest
-     * succeeds; and it is what tells us where this user's application lives, which
-     * every later branch needs in order to report anything to them at all.
+     * Where the provider returns the browser — not called directly.
+     *
+     * <p><strong>The provider calls this, not your application.</strong> The URL must be
+     * registered in the provider's console; the query parameters below are the
+     * provider's, documented so the flow can be read end to end rather than because a
+     * client ever supplies them.
+     *
+     * <p>Always answers 302 back to the {@code redirect_uri} the flow started with. A
+     * sign-in that did not work out arrives there with an {@code error} parameter naming
+     * the reason — the user is mid-navigation, so they are told on their own site rather
+     * than shown raw JSON. Only requests broken before the flow can start get a problem
+     * document, because those mean a bad client rather than a failed sign-in.
+     *
+     * <p>On success the response sets <strong>only the refresh cookie</strong>. The
+     * access token is deliberately absent: a token in a redirect URL would reach browser
+     * history, {@code Referer}, and every proxy log in between. The application calls
+     * {@code /refresh} to get one into memory.
+     *
+     * @param provider {@code google} or {@code github}
+     * @param code     authorization code, exchanged server-side for the provider's tokens
+     * @param state    single-use and provider-bound, issued at {@code /sso/{provider}}
+     *                 and redeemed exactly once here
+     * @param error    present instead of {@code code} when the user declined consent or
+     *                 the provider refused
      */
-    @Operation(summary = "Where the provider returns the browser — not called directly",
-            description = """
-                    **The provider calls this, not your application.** The URL must be \
-                    registered in the provider's console; the query parameters below are the \
-                    provider's, and are documented so the flow can be read end to end rather \
-                    than because a client ever supplies them.
-
-                    Always answers 302 back to the `redirect_uri` the flow started with. A \
-                    sign-in that did not work out arrives there with an `error` query \
-                    parameter naming the reason — the user is mid-navigation, so they are told \
-                    on their own site rather than shown raw JSON. Only requests broken before \
-                    the flow can start (unknown provider, missing or forged `state`) get a \
-                    problem document, because those mean a bad client rather than a person \
-                    whose sign-in failed.
-
-                    On success the response sets **only the refresh cookie**. The access token \
-                    is deliberately absent: a token in a redirect URL would be written to \
-                    browser history, forwarded in `Referer`, and logged by every proxy in \
-                    between. The application calls `/refresh` to get one into memory.""")
-    @ApiResponse(responseCode = "302", description = "Back to the application — with the refresh cookie set, or with an `error` parameter if sign-in was refused")
-    @ApiResponse(responseCode = "401", description = "`state` did not match a pending authorization: expired, already spent, or forged",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+    @ApiResponse(responseCode = "302", description = "Back to the application — with the refresh cookie "
+            + "set, or with an `error` parameter if sign-in was refused")
+    @ApiResponse(responseCode = "401", description = "`state` did not match a pending authorization: "
+            + "expired, already spent, or forged", ref = MugenApiDocs.PROBLEM_REF)
     @ApiResponse(responseCode = "404", description = "Unknown or unconfigured provider",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+            ref = MugenApiDocs.PROBLEM_REF)
+    @PublicEndpoint
     @GetMapping("/{provider}/callback")
-    public ResponseEntity<Void> callback(@Parameter(description = "`google` or `github`", example = "google")
-                                         @PathVariable String provider,
-                                         @Parameter(description = "Authorization code, exchanged server-side for the provider's tokens")
+    public ResponseEntity<Void> callback(@Parameter(example = "google") @PathVariable String provider,
                                          @RequestParam(required = false) String code,
-                                         @Parameter(description = "Single-use, provider-bound, issued at `/sso/{provider}` and redeemed exactly once here")
                                          @RequestParam(required = false) String state,
-                                         @Parameter(description = "Present instead of `code` when the user declined consent or the provider refused")
                                          @RequestParam(required = false) String error,
-                                         // The browser-binding nonce. Hidden for the same reason as the
-                                         // refresh cookie: it is set by this service and replayed by the
-                                         // browser, never supplied by a caller. `state` alone does not stop
-                                         // login CSRF — an attacker can obtain a genuine code+state pair and
-                                         // lure a victim through this callback into the attacker's account.
+                                         // Set by this service and replayed by the browser, never
+                                         // supplied by a caller — so hidden, like the refresh cookie.
                                          @Parameter(hidden = true)
                                          @CookieValue(name = SsoStateCookies.NAME, required = false) String nonce,
                                          HttpServletRequest httpRequest) {
