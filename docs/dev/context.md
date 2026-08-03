@@ -4,17 +4,41 @@ Companion to tasks.md, which is the checklist. This file holds only what the cod
 and git history do NOT already say: live status, decisions and their reasoning,
 and traps worth not rediscovering.
 
-## Status (2026-08-03)
-Phases 0, 1 and 2 done except the **2.11 exit gate**. 2.10 (Swagger / OpenAPI)
-landed this session: springdoc 3.1.0, seven new integration tests.
-79 unit + 41 integration tests green.
+## Status (paused 2026-08-03)
+Phases 0, 1 and 2 done except four items on the **2.11 exit gate**. This session:
+2.10 (Swagger / OpenAPI, springdoc 3.1.0) landed, and then **mugen-auth ran for the
+first time** — which is where the session's real value was, see "First real run"
+below. 80 unit + 41 integration tests green.
 
-**Next task is the 2.11 exit gate**, which Phase 3 must not start before. Its first
-item is the one everything else waits on: the service has never actually been run.
+**mugen-auth is proven working end to end against the compose stack**: registration
+through to a `mugen.user.registered` message on a real Kafka broker, refresh
+rotation, replay detection, Flyway against real SQL Server, Eureka registration.
+That claim could not be made before this session and is the point of the gate.
 
-Testcontainers starts its own SQL Server and Redis, so none of this exercises the
-compose stack, and no test has ever spoken to a real broker — the outbox tests all
-mock `KafkaTemplate`. Both are on the 2.11 gate.
+### Resuming
+Nothing is half-finished — the tree is clean and every test passes. To pick up:
+
+1. `docker compose up -d` (all 14 containers verified working; ~1 min to healthy)
+2. `cd services/mugen-auth && ../../mvnw spring-boot:run`
+3. http://localhost:8081/swagger-ui.html, or `http/auth.http`
+
+If the shared modules changed since the last run, `./mvnw install -DskipTests -pl
+shared/mugen-shared,shared/mugen-web` first — running a service alone resolves them
+from the local repo, and a stale jar shadows source changes silently.
+
+### What is left on the 2.11 gate
+Four items, in the order they are worth doing:
+
+1. **Regression suite holes** — no controller tests for AuthController /
+   SessionController / TokenIntrospectController, none for RevocationCacheService or
+   AuthorizationRequestStore, none for the Google/GitHub profile mappers (GitHub's
+   private-email fallback especially — pure branching over a response shape).
+2. **Decide the revocation question** below, then the quality review pass.
+3. **`Dockerfile` + `.dockerignore`**, following `eureka-server/` as the template.
+4. **SSO against real Google and GitHub apps** — the only item that needs something
+   this project cannot produce for itself: real client credentials and the callback
+   URL registered in both consoles. `application-sso.yml` has still never been
+   parsed. Cheapest first check is in "Open gaps" below.
 
 ## First real run (2026-08-03) — what it caught
 `docker compose up -d` and `spring-boot:run`, both for the first time. Infra came up
@@ -66,10 +90,11 @@ than use a cookie jar.
   shadows source changes. Use `-am`, or `install` the shared modules first.
 
 ## Open gaps
-Everything untested about mugen-auth is now tracked as the **2.11 exit gate** in
-tasks.md, which Phase 3 must not start before. In short: the service has never been
-run, `docker compose up` has never been executed, SSO has never touched a real
-provider, and the regression suite has named holes.
+Everything untested about mugen-auth is tracked as the **2.11 exit gate** in
+tasks.md, which Phase 3 must not start before. The first three items are now closed
+— the service runs, the compose stack works, and an event has reached a real broker.
+What is left is SSO against a real provider, the named regression-suite holes, the
+quality review (including the revocation question above) and the Dockerfile.
 
 Cheapest first SSO check, short of registering real apps: run with
 `-Dspring-boot.run.profiles=sso` and dummy credentials, then confirm
