@@ -36,6 +36,9 @@ import org.springframework.security.oauth2.core.endpoint.OAuth2AccessTokenRespon
 import org.springframework.security.oauth2.core.user.DefaultOAuth2User;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.support.SimpleTransactionStatus;
+import org.springframework.transaction.support.TransactionCallback;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.net.URI;
 import java.time.Duration;
@@ -95,6 +98,9 @@ class OAuthServiceTest {
     @Mock
     private OAuthProfileMapper profileMapper;
 
+    @Mock
+    private TransactionTemplate transactionTemplate;
+
     private SsoProperties properties;
     private OAuthService oauthService;
 
@@ -103,7 +109,14 @@ class OAuthServiceTest {
         properties = new SsoProperties(Duration.ofMinutes(5), FRONTEND, List.of(FRONTEND));
         oauthService = new OAuthService(
                 registry, pendingAuthorizations, tokenClient, userService, users, links,
-                authService, userEvents, properties);
+                authService, userEvents, properties, transactionTemplate);
+
+        // Runs the callback rather than returning null, so complete() still exercises
+        // linkOrCreate. That the boundary is a real one is not observable here — it
+        // needs a Spring context and a transaction manager.
+        when(transactionTemplate.execute(any())).thenAnswer(invocation ->
+                invocation.getArgument(0, TransactionCallback.class)
+                        .doInTransaction(new SimpleTransactionStatus()));
 
         when(registry.registrationFor(OAuthProvider.GOOGLE)).thenReturn(registration(CALLBACK));
         when(registry.mapperFor(OAuthProvider.GOOGLE)).thenReturn(profileMapper);

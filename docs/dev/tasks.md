@@ -277,17 +277,34 @@ services get built from, so anything wrong here gets copied ten times.
       — the gateway does the check and auth stays free of per-request lookups — and
       behind the gateway it is airtight. The question is whether "the gateway is the
       only entry point" is a strong enough guarantee to rest a revocation on.
-- [ ] **Run the SSO flow against a real Google and a real GitHub app.** It has
-      never touched a provider: token exchange and user-info are stubbed in every
-      test and the `sso` profile has never been activated, so
-      `application-sso.yml` has not even been parsed once. Needs real client
-      credentials and the callback URL registered in both consoles.
+- [x] **Run the SSO flow against a real Google app.** It had never touched a
+      provider: token exchange and user-info are stubbed in every test and the `sso`
+      profile had never been activated, so `application-sso.yml` had not been parsed
+      once. Needs real client credentials and the callback URL registered in the
+      console.
+- **Done 2026-08-04, and it found the bug the whole gate exists for.** A real sign-in
+  500ed on `IllegalTransactionStateException`: `OAuthService.complete` called
+  `linkOrCreate` on its own bean, so the proxy was bypassed and its `@Transactional`
+  had never once applied. See context.md, "The transaction that was never there".
+  After the fix, verified end to end: user + `oauth_links` + `outbox_events` rows all
+  committing together, then `mugen.user.registered` on the real broker with
+  `published_at` set on the first attempt and `eventId` equal to the row id.
+- [ ] **Run the SSO flow against a real GitHub app.** Deferred by choice 2026-08-04 —
+      the registration is commented out in `application-sso.yml` so the service boots
+      without credentials, and `/sso/github` answers 404 as
+      `OAuthClientRegistry.registrationFor` intends. GitHub's private-email fallback
+      is the untested half and is why this stays on the gate.
 - [ ] **Regression suite complete and green** — `./mvnw verify` with the gaps
       closed: AuthController and SessionController have no controller-level tests,
       TokenIntrospectController is untested, RevocationCacheService and the
       Redis-backed AuthorizationRequestStore have no tests of their own, and the
       Google/GitHub profile mappers are untested (GitHub's private-email fallback
       especially — it is pure branching over a response shape).
+- [ ] **A test that can see a proxy boundary.** Added 2026-08-04: nothing in the suite
+      can, which is why a `@Transactional` that never applied survived 23 passing tests.
+      Needs a Spring context, not `new OAuthService(...)` — assert that a first SSO
+      sign-in leaves the user, link and outbox rows all present, and that nothing is
+      left behind when the outbox insert fails.
 - [ ] **Quality review pass over the whole service** — library choices, layering,
       error handling, DevEx, deploy story. Fix findings, do not defer them.
 - **Partly done 2026-08-03**, on the three things that would have been copied ten

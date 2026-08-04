@@ -33,7 +33,9 @@ import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationResp
 import org.springframework.security.oauth2.core.endpoint.PkceParameterNames;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StringUtils;
 
 import java.net.URI;
@@ -72,6 +74,7 @@ public class OAuthService {
     private final AuthService authService;
     private final UserEventPublisher userEventPublisher;
     private final SsoProperties ssoProperties;
+    private final TransactionTemplate transactionTemplate;
 
     /**
      * Starts a sign-in: mints {@code state}, a PKCE verifier and a browser nonce,
@@ -137,7 +140,7 @@ public class OAuthService {
      * <p>
      * Deliberately not {@code @Transactional}: two network calls happen here, and
      * holding a connection across a provider's latency is how a pool gets exhausted.
-     * Only {@link #linkOrCreate}, which writes, is transactional.
+     * Only {@link #linkOrCreate}, which writes, runs in one — opened explicitly.
      */
     public TokenPair complete(OAuthProvider provider,
                               PendingAuthorization pending,
@@ -160,7 +163,11 @@ public class OAuthService {
         OAuth2AccessToken accessToken = exchange(registration, pending, code, state, provider);
         OAuthUserProfile profile = loadProfile(registration, accessToken, provider);
 
-        SsoUser resolved = linkOrCreate(provider, profile);
+        // Through a TransactionTemplate, not a plain call: linkOrCreate is on this
+        // same bean, so calling it directly bypasses the proxy and its @Transactional
+        // never applies — which is how the writes below ran unatomically until the
+        // first real provider sign-in threw on the MANDATORY publisher.
+        SsoUser resolved = transactionTemplate.execute(status -> linkOrCreate(provider, profile));
         log.info("SSO sign-in provider={} userId={} newAccount={}",
                 provider, resolved.user().getId(), resolved.created());
 
@@ -177,8 +184,13 @@ public class OAuthService {
      * one is only a claim and would let anyone squat a stranger's account; and a
      * verified address matching an existing account links to it, on the same proof a
      * password reset relies on.
+     * <p>
+     * {@code MANDATORY} states the requirement the user row, the link row and the
+     * outbox event all depend on. {@link #complete} supplies the transaction with a
+     * {@code TransactionTemplate}; the annotation guards any caller reaching it
+     * through the proxy.
      */
-    @Transactional
+    @Transactional(propagation = Propagation.MANDATORY)
     public SsoUser linkOrCreate(OAuthProvider provider, OAuthUserProfile profile) {
         Optional<OAuthLink> existingLink = oauthLinks.findByProviderAccount(provider, profile.providerUserId());
         if (existingLink.isPresent()) {

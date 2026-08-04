@@ -4,6 +4,31 @@ Companion to tasks.md, which is the checklist. This file holds only what the cod
 and git history do NOT already say: live status, decisions and their reasoning,
 and traps worth not rediscovering.
 
+## Status (paused 2026-08-04)
+**Real Google SSO works end to end.** Credentials from a Google Cloud OAuth client,
+`sso` profile activated for the first time, a real sign-in completed, and the account
+it created reached Kafka. Getting there cost one genuine bug — see "The transaction
+that was never there" below, which is the most important thing in this file right now.
+
+Three items remain on the 2.11 gate: the regression-suite holes (now including a test
+that can see a proxy boundary), the revocation decision plus the rest of the quality
+review, and the Dockerfile. GitHub SSO is deliberately deferred and stays on the gate.
+
+### Resuming the SSO flow specifically
+1. `.env` holds real `GOOGLE_OAUTH_*` values and is gitignored — never committed, and
+   verified absent from history.
+2. Spring does not read `.env` (its own header says so). Export it, or use the
+   IntelliJ EnvFile plugin. A loader script lives in the session scratchpad.
+3. `../../mvnw spring-boot:run -Dspring-boot.run.profiles=sso`, then open
+   `http://localhost:8081/api/v1/auth/sso/google` **in a browser** — the nonce cookie
+   must be set in the browser that finishes the flow, so curl cannot drive it.
+4. A successful sign-in ends at `http://localhost:4200/auth/callback`, which does not
+   exist yet. "This site can't be reached" **is** the success case; the refresh cookie
+   is set and the rows are written. Check the database, not the browser.
+5. `MUGEN_SSO_CALLBACK_BASE_URL=http://localhost:8081` overrides the `:8080` gateway
+   default in `application-sso.yml`. It must match the console registration exactly.
+   Move it to `:8080` when the gateway exists, and re-register there.
+
 ## Status (paused 2026-08-03)
 Phases 0, 1 and 2 done except four items on the **2.11 exit gate**. Earlier this day:
 2.10 (Swagger / OpenAPI, springdoc 3.1.0) landed and **mugen-auth ran for the first
@@ -57,6 +82,44 @@ Four items, in the order they are worth doing:
    this project cannot produce for itself: real client credentials and the callback
    URL registered in both consoles. `application-sso.yml` has still never been
    parsed. Cheapest first check is in "Open gaps" below.
+
+## The transaction that was never there (2026-08-04)
+The first real Google sign-in answered 500 with
+`IllegalTransactionStateException: No existing transaction found for transaction
+marked with propagation 'mandatory'`. The cause is Spring's oldest trap, and it had
+been sitting in the code since the SSO flow was written.
+
+- `@Transactional` is not compiled into the method; the **proxy** around the bean
+  opens the transaction. So it only applies to calls arriving from outside the bean.
+- `SsoController` → `complete` goes through the proxy, but `complete` is deliberately
+  not transactional: it makes two provider network calls, and holding a connection
+  across them exhausts the pool.
+- `complete` → `linkOrCreate` is a plain `this` call on the same bean. The proxy is
+  bypassed, so `linkOrCreate`'s `@Transactional` **had never once taken effect.**
+- `linkOrCreate` → `userEventPublisher.userRegistered` crosses into a *different*
+  bean, so that proxy does apply, and its `MANDATORY` correctly refused to write an
+  outbox row with no transaction around it.
+
+**The 500 was the good outcome. The silent damage was the point.** With no
+transaction, `users.saveAndFlush` and `oauthLinks.saveAndFlush` each committed
+separately, so the failed attempt left a real linked account with no
+`mugen.user.registered` event — no profile in mugen-user, forever. Exactly the dual
+write the outbox exists to remove, reintroduced by an annotation that looked right.
+This also widens the orphan-row gap recorded under "Open gaps": it was filed as a
+race needing two simultaneous sign-ins, but any failure between the two saves does it.
+
+**Fix:** `complete` opens the transaction with a `TransactionTemplate` at the call
+site, which needs no proxy and keeps the network calls outside it. `linkOrCreate`
+moved to `MANDATORY`, the same rail the publisher already had. Note what that
+annotation does and does not do — on the self-call path it is still not evaluated, so
+it guards external callers; the template is what actually supplies the transaction.
+
+**Why 23 passing tests missed it:** `OAuthServiceTest` builds the service with `new
+OAuthService(...)`. No context, no proxy, so the annotation was never in play, and a
+mocked publisher does not care about transactions. The lesson generalises past this
+bug: **a unit test cannot see a proxy boundary, so it cannot see `@Transactional`,
+`@Async`, `@Cacheable` or `@PreAuthorize` failing to apply.** Every one of those is a
+silent no-op under self-invocation. Ten services will use them.
 
 ## First real run (2026-08-03) — what it caught
 `docker compose up -d` and `spring-boot:run`, both for the first time. Infra came up
@@ -124,7 +187,9 @@ Not on the gate, deferred by choice:
 - Nothing ships logs to Loki. Grafana has the datasource but no writer; services
   need a Loki appender (loki-logback-appender) when logging is set up.
 - **Orphan user row in `OAuthService.linkOrCreate`** (pre-existing, spotted while
-  wiring 2.8). Two first-ever sign-ins for the same provider account can both find
+  wiring 2.8). Narrower now that a transaction actually wraps the two writes — before
+  2026-08-04 there was none, so any failure between them orphaned a row, not just a
+  race. Two first-ever sign-ins for the same provider account can both find
   no link and both create a user; the loser of the `oauth_links` race re-reads the
   winner and signs in as them, leaving its own freshly-created user row unreachable
   — no link, no password, and now deliberately no `mugen.user.registered` either,
