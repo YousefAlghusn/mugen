@@ -25,6 +25,9 @@ $RECYCLE.BIN/
 # --- Logs ---
 *.log
 logs/
+# Local run output (IntelliJ console capture / logging.file.name). Carries real
+# sign-in detail, so it must never be committed.
+.logs
 
 # --- Secrets / keys ---
 .env
