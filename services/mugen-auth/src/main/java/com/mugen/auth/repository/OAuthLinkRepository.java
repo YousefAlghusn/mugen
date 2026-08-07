@@ -16,12 +16,15 @@ public interface OAuthLinkRepository extends JpaRepository<OAuthLink, UUID> {
 
     /**
      * The SSO callback lookup: given the provider's account id, which local user is
-     * this? Fetches the user in the same query since the caller always needs it to
-     * mint a token. Backed by {@code uq_oauth_links_provider_account}.
+     * this? Fetches the user <em>and its roles</em> in the same query, because the
+     * caller mints a token from both and the entity is detached by the time it does
+     * — the transaction around the lookup has committed. Backed by
+     * {@code uq_oauth_links_provider_account}.
      */
     @Query("""
             select l from OAuthLink l
-            join fetch l.user
+            join fetch l.user u
+            left join fetch u.roles
             where l.provider = :provider
               and l.providerUserId = :providerUserId
             """)
