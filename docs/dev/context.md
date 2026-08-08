@@ -255,7 +255,11 @@ Not on the gate, deferred by choice:
    tasks.md; four items remain, in the order given under "What is left on the 2.11 gate"
    above. Swagger UI makes the endpoint sweep cheap — `/swagger-ui.html` on port 8081
    drives everything except the two SSO redirects.
-2. Phase 3 — gateway. **Read "Authn vs authz" below before writing 3.2's SecurityConfig**:
+2. **2.13 — the test suite revision**, ideally before the gate's regression-suite item
+   rather than after. Filling holes at the current standard multiplies restatement and
+   hand-listed paths across ten more services; the reasoning and the named offenders
+   are in tasks.md. 2.12 (device grant) is feature work and can follow the gateway.
+3. Phase 3 — gateway. **Read "Authn vs authz" below before writing 3.2's SecurityConfig**:
    it must NOT hold a public-vs-protected route list, and the reasoning matters more than
    the rule. `@PublicEndpoint`, `PublicEndpointMatcher` and the OpenAPI customizers
    already live in `mugen-web`, so the gateway and every later service inherit them by

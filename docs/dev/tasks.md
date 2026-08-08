@@ -297,6 +297,9 @@ services get built from, so anything wrong here gets copied ten times.
       TokenIntrospectController is untested, RevocationCacheService and the
       Redis-backed AuthorizationRequestStore have no tests of their own, and
       GoogleProfileMapper is untested.
+- **Before closing this, read 2.13.** Some of what is already green is restatement or
+  hand-listed paths, and filling these holes the same way multiplies the problem.
+  Deciding the bar first is cheaper than writing tests twice.
 - [ ] **Restore the cross-provider `state` test.** Deleted with GitHub 2026-08-08:
       `OAuthProvider` has one value, so no second provider exists to mint a state for.
       The check in `OAuthService.complete` is still there and still unguarded — this
@@ -375,6 +378,67 @@ feature. Decide deliberately whether Phase 3 waits for it.
       and that a completed code cannot be polled twice for a second token pair
 - [ ] **Run it against the real Google device endpoint.** Same rule that caught the
       `@Transactional` bug — a stubbed provider agrees with whatever you assumed
+
+---
+
+### 2.13 Test suite revision — decide what is worth testing
+Noticed 2026-08-08, before the suite gets copied into ten more services. The problem
+is not coverage, it is that **some tests assert things that were never claims**, and
+those break on harmless edits while catching no defect. A suite that cries wolf on a
+rename gets ignored on the one day it is right.
+
+**The distinction to settle first.** A test earns its place by failing when behaviour
+breaks. Three failure modes to name and then hunt:
+
+- **Restatement** — asserting a literal that was copied from the source. Change the
+  source, change the test, learn nothing. The test cannot fail for a reason that
+  matters, because it has no independent idea of what is right.
+- **Brittle** — asserting an incidental detail (a path string, a sentence of prose, a
+  title) so a safe change goes red.
+- **Hand-listed** — enumerating what exists today. It cannot fail when something is
+  *added*, which is exactly when the rule needs enforcing.
+
+Against: an **invariant** test, which states the rule and covers cases not written
+yet. `OpenApiIntegrationTest.documentAgreesWithTheFilterChain` is the model — "an
+operation advertises `bearerAuth` exactly when its handler is not `@PublicEndpoint`"
+holds for every endpoint mugen will ever have.
+
+**Concrete offenders found while looking, all in `OpenApiIntegrationTest`:**
+- [ ] `documentsThePublicApi` hand-lists 8 paths. Delete or invert it — if springdoc
+      found no controllers, four other tests in the file already fail.
+- [ ] `apiDocsArePublic` asserts `info.title == "Mugen Auth API"`. Pure restatement of
+      `OpenApiConfig`. The reachability half of it is the part worth keeping.
+- [ ] `javadocBecomesTheDescription` asserts three English phrases from
+      `AuthController`'s javadoc. **Rewording a comment fails the build.** The real
+      claim — therapi is wired at all — is structural: some operation has a non-empty
+      description.
+- [ ] `declaresBearerScheme` and `declaresRefreshCookieScheme` restate `OpenApiConfig`
+      literals. The cookie one has a genuine claim underneath (the name is *derived*
+      from `RefreshCookieProperties`, not hardcoded) — so assert it equals the
+      injected property, which fails on the bug it was written for and not on a rename.
+- [ ] `declaresTheSharedProblemResponse` mixes a good invariant (every `ErrorCode`
+      reaches the document) with a hardcoded `/register` + 409. Keep the first half.
+- [ ] `publicEndpointsAreReachableAndTheRestAreNot` hand-lists 8 paths **in the same
+      file** whose other javadoc explains why a hand-written list cannot cover
+      endpoints that do not exist yet. Derive the list from the same annotation scan.
+
+**Wider, and the reason this is its own item:**
+- [ ] **43 hardcoded `/api/v1/auth/...` literals** across `AuthFlowIntegrationTest`,
+      `OpenApiIntegrationTest` and `SsoControllerTest`. A path change is a 43-line
+      edit today. Decide whether that is fine (paths are a public contract, and
+      pinning them is arguably the point) or whether it wants constants — but decide
+      it, rather than inheriting it ten more times.
+- [ ] **Four `@SpringBootTest` + Testcontainers classes, each starting its own SQL
+      Server.** `OpenApiIntegrationTest` needs a database only because the context
+      wants a datasource. Look at context reuse before this becomes 40 containers.
+- [ ] **Decide the coverage bar.** Not "everything". Candidates: security decisions,
+      state machines, anything with a silent failure mode, anything a proxy boundary
+      could disable. Explicitly *not*: configuration literals, framework behaviour,
+      getters, prose.
+
+**Deliverable is a written standard in CLAUDE.md**, next to the comment and logging
+rules and for the same reason — the alternative is eleven services of per-file
+judgement. Then apply it here, and let the number of tests fall if it falls.
 
 ---
 
