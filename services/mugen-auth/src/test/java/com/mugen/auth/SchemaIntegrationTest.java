@@ -195,10 +195,10 @@ class SchemaIntegrationTest {
     @DisplayName("the same provider cannot be linked to one user twice")
     void enforcesOneLinkPerProviderPerUser() {
         User user = users.save(User.fromSso("ayato", "ayato@mugen.dev"));
-        oauthLinks.saveAndFlush(OAuthLink.link(user, OAuthProvider.GITHUB, "github-1"));
+        oauthLinks.saveAndFlush(OAuthLink.link(user, OAuthProvider.GOOGLE, "google-sub-1"));
 
         assertThatThrownBy(() ->
-                oauthLinks.saveAndFlush(OAuthLink.link(user, OAuthProvider.GITHUB, "github-2")))
+                oauthLinks.saveAndFlush(OAuthLink.link(user, OAuthProvider.GOOGLE, "google-sub-2")))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 }

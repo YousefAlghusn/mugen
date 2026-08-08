@@ -8,8 +8,8 @@ import org.springframework.util.StringUtils;
  * Everything else — avatar, locale, follower count — is dropped: identity only.
  *
  * @param providerUserId    the provider's stable id, never the email
- * @param email             may be null; GitHub returns nothing when all addresses
- *                          on the account are private
+ * @param email             may be null; a provider can withhold it entirely when the
+ *                          account keeps its addresses private
  * @param emailVerified     load-bearing — it decides whether this login may be
  *                          matched onto an existing mugen account
  * @param suggestedUsername a starting point, not a guarantee; may collide

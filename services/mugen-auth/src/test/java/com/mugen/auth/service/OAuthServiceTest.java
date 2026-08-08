@@ -289,18 +289,10 @@ class OAuthServiceTest {
         private final PendingAuthorization pending =
                 new PendingAuthorization(OAuthProvider.GOOGLE, "verifier", FRONTEND, "nonce");
 
-        @Test
-        @DisplayName("a state issued for another provider cannot be spent here")
-        void rejectsCrossProviderState() {
-            PendingAuthorization forGithub =
-                    new PendingAuthorization(OAuthProvider.GITHUB, "verifier", FRONTEND, "nonce");
-
-            assertThatThrownBy(() -> oauthService.complete(
-                    OAuthProvider.GOOGLE, forGithub, "code", "state", RequestContext.unknown()))
-                    .isInstanceOf(AuthExceptions.SsoStateInvalid.class);
-
-            verify(tokenClient, never()).getTokenResponse(any());
-        }
+        // The cross-provider state test lived here and could not survive GitHub's
+        // removal: OAuthProvider has one value, so no second provider exists to mint a
+        // state for. The check in OAuthService.complete stays — restore the test with
+        // the next provider (docs/dev/context.md, "Removing GitHub SSO").
 
         @Test
         @DisplayName("a callback with no code is refused")
@@ -418,9 +410,9 @@ class OAuthServiceTest {
         @DisplayName("a provider that shares no email cannot create an account")
         void missingEmailIsRefused() {
             when(links.findByProviderAccount(any(), any())).thenReturn(Optional.empty());
-            OAuthUserProfile noEmail = new OAuthUserProfile("gh-1", null, false, "kaneki");
+            OAuthUserProfile noEmail = new OAuthUserProfile("sub-1", null, false, "kaneki");
 
-            assertThatThrownBy(() -> oauthService.linkOrCreate(OAuthProvider.GITHUB, noEmail))
+            assertThatThrownBy(() -> oauthService.linkOrCreate(OAuthProvider.GOOGLE, noEmail))
                     .isInstanceOf(AuthExceptions.SsoEmailUnavailable.class);
         }
 

@@ -4,7 +4,7 @@
 # ClientRegistrationRepository when at least one registration is configured, and it
 # rejects a registration whose client-id is blank. Putting these in the default
 # profile would therefore mean mugen-auth refuses to start on any machine without
-# Google and GitHub credentials — which is most of them, and which would break the
+# Google credentials — which is most of them, and which would break the
 # run-from-IntelliJ dev story for a feature the developer is not even working on.
 #
 # Same rule CLAUDE.md applies to the Config Server: an optional dependency being
@@ -43,23 +43,3 @@ spring:
               - openid
               - email
               - profile
-
-          # GitHub is commented out, not deleted: a declared registration with no
-          # credentials stops the service booting, and Google is being proven first.
-          # Uncomment once GITHUB_OAUTH_* are set — until then OAuthClientRegistry
-          # finds no registration and /sso/github answers 404, which is its designed
-          # per-provider behaviour.
-          #
-          # github:
-          #   client-id: ${GITHUB_OAUTH_CLIENT_ID}
-          #   client-secret: ${GITHUB_OAUTH_CLIENT_SECRET}
-          #   redirect-uri: ${MUGEN_SSO_CALLBACK_BASE_URL:http://localhost:8080}/api/v1/auth/sso/github/callback
-          #   # user:email is not optional here. GitHub omits the address from /user
-          #   # whenever the account keeps it private — the default for a large share
-          #   # of accounts — and it is the only endpoint that reports whether an
-          #   # address is verified at all. Without this scope, GithubProfileMapper
-          #   # cannot produce a verified email and every first-time GitHub sign-in is
-          #   # refused by the linking rules.
-          #   scope:
-          #     - read:user
-          #     - user:email

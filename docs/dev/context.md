@@ -11,8 +11,12 @@ it created reached Kafka. Getting there cost one genuine bug — see "The transa
 that was never there" below, which is the most important thing in this file right now.
 
 Three items remain on the 2.11 gate: the regression-suite holes (now including a test
-that can see a proxy boundary), the revocation decision plus the rest of the quality
-review, and the Dockerfile. GitHub SSO is deliberately deferred and stays on the gate.
+that can see a proxy boundary and the cross-provider `state` test), the revocation
+decision plus the rest of the quality review, and the Dockerfile.
+
+**GitHub SSO was removed on 2026-08-08**, not deferred — see "Removing GitHub SSO"
+below. The replacement is 2.12, the device grant, which is new work and deliberately
+**not** on the gate.
 
 ### Resuming the SSO flow specifically
 1. `.env` holds real `GOOGLE_OAUTH_*` values and is gitignored — never committed, and
@@ -66,22 +70,71 @@ shared/mugen-shared,shared/mugen-web` first — running a service alone resolves
 from the local repo, and a stale jar shadows source changes silently.
 
 ### What is left on the 2.11 gate
-Four items, in the order they are worth doing:
+Three items, in the order they are worth doing (updated 2026-08-08):
 
 1. **Regression suite holes** — no controller tests for AuthController /
    SessionController, none for RevocationCacheService or AuthorizationRequestStore, none
-   for the Google/GitHub profile mappers (GitHub's private-email fallback especially —
-   pure branching over a response shape). TokenIntrospectController and both SSO
-   endpoints are now covered at the filter-chain level by `OpenApiIntegrationTest`, but
-   only for reachability, not behaviour.
+   for GoogleProfileMapper. TokenIntrospectController and both SSO endpoints are now
+   covered at the filter-chain level by `OpenApiIntegrationTest`, but only for
+   reachability, not behaviour. Two named holes join this: a test that can see a proxy
+   boundary, and the cross-provider `state` test removed with GitHub.
 2. **Decide the revocation question** below, then finish the quality review. The review
    is part-done: comments, endpoint visibility and API docs were covered (see "Endpoint
    visibility" below). **Untouched: library choices, layering, and the deploy story.**
 3. **`Dockerfile` + `.dockerignore`**, following `eureka-server/` as the template.
-4. **SSO against real Google and GitHub apps** — the only item that needs something
-   this project cannot produce for itself: real client credentials and the callback
-   URL registered in both consoles. `application-sso.yml` has still never been
-   parsed. Cheapest first check is in "Open gaps" below.
+
+Google SSO closed the fourth item on 2026-08-04. GitHub was removed rather than
+finished — see "Removing GitHub SSO" below.
+
+## Removing GitHub SSO, and what replaces it (2026-08-08)
+GitHub was a second **authorization-code** provider. Same redirect, same PKCE, same
+`state`, same callback — only the user-info JSON differed. It exercised
+`OAuthProfileMapper` and nothing else, so finishing it would have proven the seam
+that is already proven and taught nothing new. Removed rather than left half-done.
+
+Replaced by **2.12, the device authorization grant**, which varies the *grant* rather
+than the response shape. That is the part `OAuthClientRegistry` cannot absorb.
+
+**What the removal cost, and it is not free:**
+- `OAuthProvider` now has one value. `OAuthServiceTest.rejectsCrossProviderState`
+  could not survive that — there is no second provider to mint a state for. The check
+  in `OAuthService.complete` is untouched and now **unguarded**; it is on the 2.11
+  gate to restore, not written off.
+- `spring-boot-restclient` has no injector left. Kept deliberately for 2.12; if that
+  slips, it is dead weight and the pom comment says so.
+- The migrations still say `GOOGLE | GITHUB` in comments and were **deliberately not
+  edited**. Flyway checksums applied migrations, so changing even a comment fails
+  validation against every database that already ran V1 and V3. A wrong comment is
+  cheaper than a repair migration; correct it in a later migration if it ever matters.
+
+## SSO flow shapes — why the device grant (2026-08-08)
+The axis that matters is **which channel carries the handshake**, not which company
+is on the other end.
+
+- **Front-channel** (redirect): OIDC authorization code, SAML, CAS. The browser is
+  the courier, so there is a `redirect_uri`, and login CSRF is the threat. This is
+  what mugen has.
+- **Back-channel** (no redirect): OIDC CIBA, the device grant, Kerberos, mTLS. The
+  server talks to the provider; the user approves somewhere else entirely; the client
+  polls or is called back.
+
+**Nafath is back-channel + separate-device + poll** — you POST a national id, the
+user's phone buzzes, they tap a number your screen is showing, you poll for the
+result. That two-digit number is channel binding: it proves the person tapping is the
+person watching. BankID and MitID are the same shape.
+
+**None of them are obtainable.** Nafath needs a Saudi commercial registration and a
+compliance review; BankID needs a Nordic bank relationship. There is no developer
+tier for national identity, which is correct of them and fatal for us.
+
+The device grant is the same architecture with credentials Google hands out for free:
+no redirect, separate device, transaction state with a TTL, polling, expiry, and
+`slow_down` backpressure. The one difference is that the user types a code rather
+than receiving a push — a UX difference, not a backend one.
+
+Rejected: a mock Nafath module. This project's whole 2.11 gate exists because
+stubbed providers hid a `@Transactional` that had never applied. A mock agrees with
+whatever we assumed, and being surprised is the point.
 
 ## The transaction that was never there (2026-08-04)
 The first real Google sign-in answered 500 with

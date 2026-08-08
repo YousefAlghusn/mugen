@@ -9,6 +9,10 @@ package com.mugen.auth.entity;
  */
 public enum OAuthProvider {
 
-    GOOGLE,
-    GITHUB
+    /**
+     * One value, and a flow is not one of them: the device grant (tasks.md 2.12)
+     * authenticates the same Google account and returns the same {@code sub}, so it
+     * links here rather than adding a sibling.
+     */
+    GOOGLE
 }

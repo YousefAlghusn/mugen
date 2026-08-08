@@ -7,7 +7,7 @@ import com.mugen.auth.entity.OAuthProvider;
  * Held in Redis, keyed by {@code state}.
  *
  * @param provider     stored, not read from the callback path, so a state minted for
- *                     Google cannot be redeemed at the GitHub callback
+ *                     one provider cannot be redeemed at another's callback
  * @param codeVerifier the PKCE secret; never leaves this service until the token call
  * @param redirectUri  already checked against the allowlist when the flow started
  * @param browserNonce binds the flow to the browser that started it, via a matching

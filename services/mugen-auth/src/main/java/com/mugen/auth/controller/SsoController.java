@@ -35,7 +35,7 @@ import java.util.Locale;
 @RequestMapping("/api/v1/auth/sso")
 @RequiredArgsConstructor
 @Tag(name = "SSO", description = """
-        Sign-in through Google or GitHub, as an OAuth 2.0 authorization code flow with PKCE.
+        Sign-in through Google, as an OAuth 2.0 authorization code flow with PKCE.
 
         **Neither endpoint is a JSON call, and neither can be exercised from this page.** \
         They are navigation targets: you send the browser to `/sso/{provider}` as a link or a \
@@ -64,7 +64,7 @@ public class SsoController {
      * the only thing between this endpoint and an open redirect handing a look-alike site
      * a freshly signed-in browser.
      *
-     * @param provider {@code google} or {@code github}
+     * @param provider {@code google}
      * @param redirectUri where to send the browser once sign-in finishes; defaults to the
      * configured front-end callback
      */
@@ -107,7 +107,7 @@ public class SsoController {
      * history, {@code Referer}, and every proxy log in between. The application calls
      * {@code /refresh} to get one into memory.
      *
-     * @param provider {@code google} or {@code github}
+     * @param provider {@code google}
      * @param code authorization code, exchanged server-side for the provider's tokens
      * @param state single-use and provider-bound, issued at {@code /sso/{provider}} and
      * redeemed exactly once here

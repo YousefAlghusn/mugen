@@ -98,8 +98,8 @@ public final class AuthExceptions {
     }
 
     /**
-     * No usable email — GitHub does this when every address is private and
-     * {@code user:email} was denied. mugen-user keys off it, so an account needs one.
+     * No usable email — a provider can withhold one when the account keeps its
+     * addresses private. mugen-user keys off it, so an account needs one.
      */
     public static class SsoEmailUnavailable extends BusinessRuleException {
         public SsoEmailUnavailable(String provider) {

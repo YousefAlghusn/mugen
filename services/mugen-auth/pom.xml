@@ -31,7 +31,7 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
-        <!-- Google + GitHub SSO (tasks.md 2.4 OAuthService, 2.7 SsoController). -->
+        <!-- Google SSO (tasks.md 2.4 OAuthService, 2.7 SsoController). -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-oauth2-client</artifactId>
@@ -41,10 +41,10 @@
             in spring-web, but its autoconfiguration was split out, so without this
             there is no RestClient.Builder bean to inject at all.
 
-            The bean, not RestClient.create(), because Boot's builder carries this
-            service's configured Jackson — including fail-on-unknown-properties:
-            false. GithubProfileMapper's response record maps three fields out of a
-            payload with more, so a default converter would reject every response.
+            Nothing injects it since GithubProfileMapper was removed — kept for the
+            device grant (tasks.md 2.12), which calls Google's endpoints directly and
+            needs Boot's builder rather than RestClient.create(): the builder carries
+            this service's Jackson config, including fail-on-unknown-properties=false.
         -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

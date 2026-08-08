@@ -41,9 +41,9 @@ public class OAuthLink extends BaseEntity {
     private OAuthProvider provider;
 
     /**
-     * The provider's stable id for the account — Google's {@code sub}, GitHub's
-     * numeric id. Never the email address: emails are user-changeable and get
-     * reassigned, so keying on one would let a person inherit another's account.
+     * The provider's stable id for the account — Google's {@code sub}. Never the
+     * email address: emails are user-changeable and get reassigned, so keying on one
+     * would let a person inherit another's account.
      */
     @Column(name = "provider_user_id", nullable = false, length = 200)
     private String providerUserId;

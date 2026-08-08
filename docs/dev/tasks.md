@@ -102,16 +102,19 @@ for the next.
 - [x] JwtService (generateAccessToken, generateRefreshToken, parseRefreshToken)
 - [x] SessionService (open, rotate, revokeOne, revokeById, revokeAllExcept)
 - [x] AuthService (register, login, refresh, logout)
-- [x] OAuthService (Google + GitHub provider)
+- [x] OAuthService (Google)
 - **Decision:** the authorization code flow is driven explicitly, NOT via
   `oauth2Login()`. Spring's login chain ends in an authenticated servlet session;
   mugen has none, so a sign-in must end in the same token pair a password login
   produces — both routes now converge on `AuthService.issueTokens`. The protocol
   steps are still Spring Security's (token exchange, PKCE, user-info call).
 - [x] (extra) OAuthProfileMapper per provider — providers agree on the handshake
-      and almost nothing after it. GitHub needs a second call to `/user/emails`:
-      it omits private addresses from `/user` and reports verification nowhere
-      else.
+      and almost nothing after it: where the account id lives, what the email
+      field is called, whether verification is reported at all.
+- **GitHub removed 2026-08-08.** It was a second authorization-code provider, so it
+  exercised the profile-mapper seam and nothing else — the same flow, a different
+  JSON shape. Replaced by 2.12, a genuinely different grant. See context.md,
+  "Removing GitHub SSO".
 - [x] (extra) AuthorizationRequestStore — single-use `state` in Redis. No HTTP
       session exists to hold it, and any instance behind the gateway may receive
       the callback for a flow another instance started.
@@ -289,17 +292,15 @@ services get built from, so anything wrong here gets copied ten times.
   After the fix, verified end to end: user + `oauth_links` + `outbox_events` rows all
   committing together, then `mugen.user.registered` on the real broker with
   `published_at` set on the first attempt and `eventId` equal to the row id.
-- [ ] **Run the SSO flow against a real GitHub app.** Deferred by choice 2026-08-04 —
-      the registration is commented out in `application-sso.yml` so the service boots
-      without credentials, and `/sso/github` answers 404 as
-      `OAuthClientRegistry.registrationFor` intends. GitHub's private-email fallback
-      is the untested half and is why this stays on the gate.
 - [ ] **Regression suite complete and green** — `./mvnw verify` with the gaps
       closed: AuthController and SessionController have no controller-level tests,
       TokenIntrospectController is untested, RevocationCacheService and the
-      Redis-backed AuthorizationRequestStore have no tests of their own, and the
-      Google/GitHub profile mappers are untested (GitHub's private-email fallback
-      especially — it is pure branching over a response shape).
+      Redis-backed AuthorizationRequestStore have no tests of their own, and
+      GoogleProfileMapper is untested.
+- [ ] **Restore the cross-provider `state` test.** Deleted with GitHub 2026-08-08:
+      `OAuthProvider` has one value, so no second provider exists to mint a state for.
+      The check in `OAuthService.complete` is still there and still unguarded — this
+      is a real hole, not bookkeeping.
 - [ ] **A test that can see a proxy boundary.** Added 2026-08-04: nothing in the suite
       can, which is why a `@Transactional` that never applied survived 23 passing tests.
       Needs a Spring context, not `new OAuthService(...)` — assert that a first SSO
@@ -325,6 +326,55 @@ services get built from, so anything wrong here gets copied ten times.
 - [ ] mugen-auth `Dockerfile` + `.dockerignore`, following `eureka-server/` as the
       template (layered jar, non-root, MaxRAMPercentage). Every service owes one
       and this is the first.
+
+---
+
+### 2.12 Device authorization grant (RFC 8628)
+A second sign-in route with **no front-channel redirect at all**: the backend asks
+Google for a code, the user approves on a different device, and this service polls
+for the result. Chosen over a second authorization-code provider because that only
+varies the profile mapper, while this varies the *grant* — which is what forces the
+provider abstraction to be real.
+
+Modelled on Nafath / BankID, which are back-channel + separate-device + poll. Those
+need a national commercial registration and cannot be obtained for a personal
+project; the device grant is the same architecture with credentials anyone can get.
+See context.md, "SSO flow shapes".
+
+**Not on the 2.11 gate.** The gate makes mugen-auth a safe template; this is a
+feature. Decide deliberately whether Phase 3 waits for it.
+
+- [ ] Google Cloud console: a **second** OAuth client of type *TVs and Limited Input
+      devices*. The web client cannot be reused — Google serves `/device/code` only
+      to that client type. It has no client secret, which is the point: a device
+      client cannot keep one.
+- [ ] `DeviceGrantProperties` — client id, poll interval floor, expiry. Behind the
+      same `sso` profile, for the same booting reason as `application-sso.yml`.
+- [ ] **`SsoProvider` abstraction above both flows.** `OAuthClientRegistry` and
+      `ClientRegistration` are authorization-code machinery — `redirect-uri`, PKCE,
+      an authorization endpoint — and none of it applies here. Do not bend one into
+      the other; find the seam they actually share, which is `OAuthUserProfile` in
+      and `AuthService.issueTokens` out.
+- [ ] `DeviceAuthorizationService` — start (POST `/device/code`), poll (POST `/token`
+      with `grant_type=urn:ietf:params:oauth:grant-type:device_code`), then the same
+      `linkOrCreate` as the redirect flow
+- [ ] Redis-backed `DeviceAuthorizationStore` — `device_code`, status and expiry,
+      TTL matching Google's `expires_in`. Sibling of `AuthorizationRequestStore`,
+      but multi-read rather than single-use, which is the whole difference
+- [ ] Handle all four provider states: `authorization_pending`, `slow_down`,
+      `access_denied`, `expired_token`. **`slow_down` is not optional** — ignoring it
+      gets the client throttled, and it is the one branch a stub never teaches you
+- [ ] `DeviceAuthController` — `POST /sso/device/start`, `GET /sso/device/poll`.
+      Both `@PublicEndpoint`. **The poll endpoint needs its own rate limit**: it is
+      unauthenticated, it is called in a loop by design, and the client controls how
+      fast
+- [ ] Links to the **same** `OAuthProvider.GOOGLE`. Same account, same `sub`, so a
+      person who signs in both ways must land on one mugen user — a `GOOGLE_DEVICE`
+      enum value would give them two links to one Google account
+- [ ] Tests: expiry, denial, `slow_down` backoff, a poll for an unknown device code,
+      and that a completed code cannot be polled twice for a second token pair
+- [ ] **Run it against the real Google device endpoint.** Same rule that caught the
+      `@Transactional` bug — a stubbed provider agrees with whatever you assumed
 
 ---
 

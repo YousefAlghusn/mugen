@@ -148,8 +148,9 @@ public class OAuthService {
                               String state,
                               RequestContext context) {
 
-        // Otherwise a state issued on the Google flow could be presented at the GitHub
-        // callback, redeeming the code against a registration it was never meant for.
+        // Otherwise a state issued on one provider's flow could be presented at
+        // another's callback, redeeming the code against a registration it was never
+        // meant for.
         if (pending.provider() != provider) {
             log.warn("SSO state was presented at another provider's callback issuedFor={} presentedAt={}",
                     pending.provider(), provider);
