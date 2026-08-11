@@ -1,4 +1,4 @@
-package com.mugen.test;
+package com.mugen.test.support;
 
 import org.springframework.beans.factory.ObjectProvider;
 

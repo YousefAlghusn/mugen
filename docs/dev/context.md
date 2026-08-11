@@ -147,6 +147,44 @@ Rejected: a mock Nafath module. This project's whole 2.11 gate exists because
 stubbed providers hid a `@Transactional` that had never applied. A mock agrees with
 whatever we assumed, and being surprised is the point.
 
+## The test library, second pass (2026-08-11)
+The first pass gave mugen-auth its own `AuthContainers`, `@AuthIntegrationTest` and
+`@AuthSliceTest`. That is duplication with an extra step: eleven services would each
+re-derive the same three files, which is what a shared module was supposed to prevent.
+Rewritten so **a service declares nothing** — the three annotations are used as they are.
+
+Four things were established by trying them, and the failures are the useful part:
+
+- **Container beans must be user configuration, not auto-configuration.** An
+  `@AutoConfiguration` looked right — it is the one ordering where
+  `@ConditionalOnMissingBean` is reliable — and it silently does not work.
+  Auto-configurations register after ordinary configuration, so
+  `DataSourceAutoConfiguration` had already resolved `spring.datasource.url` to the
+  service's real `localhost:1433` and Flyway failed against a database nobody started.
+  `MugenContainers` is an `@Import` on `@IntegrationTest`; the escape hatch is a
+  property, not bean ordering.
+- **A container is selected by the technology, not the Testcontainers module.** The
+  condition requires the driver too. Without that second half, every service that merely
+  has the jar in reach boots the database — mugen-test's own tests would have started
+  SQL Server, Postgres and Mongo to test themselves.
+- **A mock `JwtDecoder` has to be `@MockitoBean`, not a `@Bean`.** A bean *definition* is
+  visible to `@ConditionalOnBean`, so declaring one activates
+  `OAuth2ResourceServerWebSecurityAutoConfiguration`, which then wants an `HttpSecurity`
+  a `@WebMvcTest` slice does not have, and the context fails to start. A bean *override*
+  is applied after auto-configuration has been evaluated.
+- **Fixtures need no import.** `@Fixture` is a `@Component` stereotype, and a service's
+  test-source fixtures sit under its base package, so `@SpringBootTest`'s component scan
+  finds them. Slices are unaffected (`@WebMvcTest` scans controllers only) and nothing
+  reaches production (test classes are not packaged).
+
+**mugen-test tests itself**, against Postgres because it is the fastest real database to
+start. That is what lets the library be proven without a service: the self-test asserts
+that `@IntegrationTest` alone yields a working datasource, and that no container starts
+for a technology the application does not use.
+
+Per-service configuration now lives in `src/test/resources/application-test.yml`
+(`mugen.outbox.enabled: false` for auth). One file, so still one cached context.
+
 ## Test tiers (2026-08-11)
 The rule is one sentence — **a test belongs to the lowest tier that can see the failure
 it is written for** — and the tiers exist so that "lowest" has an answer. The tier is

@@ -91,29 +91,49 @@ cannot disagree by forgetting to rename a class:
 |---|---|---|---|---|
 | unit | `unit/` | `@UnitTest` | surefire | decisions — a rule, a mapping, a state machine. No Spring. |
 | slice | `slice/` | `@SliceTest(Controller.class)` | surefire | the HTTP contract: status, headers, cookie attributes, problem bodies |
-| integration | `integration/` | `@<Service>IntegrationTest` | failsafe | proxies, transactions, real database semantics |
+| integration | `integration/` | `@IntegrationTest` | failsafe | proxies, transactions, real database semantics |
 
 - **`shared/mugen-test` owns the tiers**, the way `mugen-web` owns the error contract.
   A service declares it once at test scope and gets JUnit, AssertJ, Mockito,
   spring-test, spring-security-test, `@WebMvcTest` and Testcontainers with it. The tier
   definitions live in its `package-info.java` — read that before adding a test.
+- **A service declares nothing.** The three annotations are used as they are: no
+  per-service annotation composed over them, no container, no property preamble. A
+  service that re-declares any of that has reintroduced the duplication the module
+  exists to delete.
+- **Containers follow the classpath.** `MugenContainers` starts SQL Server for a service
+  depending on `org.testcontainers:mssqlserver` *and* the JDBC driver, Redis for one
+  using Spring Data Redis, and so on. Both halves are required so a service never boots
+  a database it merely has a jar for. Override with
+  `mugen.test.containers.<technology>.{enabled,image}`.
+- **Container beans must be user configuration, not auto-configuration.** Tried and it
+  silently fails: auto-configurations register after ordinary config, so
+  `DataSourceAutoConfiguration` has already resolved the real `localhost` URL and Flyway
+  fails against a database nobody started.
+- **Test config goes in `src/test/resources/application-test.yml`**, never in
+  `properties` on a test class. Spring caches a context per distinct configuration and
+  the containers are beans in it, so one extra property on one class is a second context
+  *and* a second database — that is how this suite once started four SQL Servers. A
+  profile-specific file layers over the real `application.yml`; a same-named
+  `application.yml` in test resources would shadow it entirely.
 - **Anything a proxy implements is invisible below the integration tier.**
   `@Transactional`, `@Async`, `@Cacheable`, `@PreAuthorize` — a test that builds its
   subject with `new` has no proxy, so the annotation is inert and the test cannot tell
   you. This cost this project a `@Transactional` that had never once applied, under 23
   green unit tests. There is no shortcut: it needs a Spring context.
-- **Containers are per service, tiers are not.** Each service writes one
-  `<Service>Containers` `@TestConfiguration` and one composed annotation over
-  `@IntegrationTest`, and every integration test in it then uses that annotation
-  **unmodified**. Spring caches a context per distinct configuration and the containers
-  are beans in it, so uniform annotations mean one context and one database for the
-  whole run — four classes with four slightly different property sets meant four of each.
+- **Mocking, one tool per tier.** unit: Mockito `@Mock`. slice: `@MockitoBean` freely —
+  a slice context is small. integration: **as little as possible**, because each distinct
+  set of overrides is another cached context and another database; switch the external
+  system off in `application-test.yml` instead.
 - `@ServiceConnection` supplies `spring.datasource.*` and `spring.data.redis.*` from the
   running container. Its factories are split per technology in Boot 4 — JDBC in
   `spring-boot-jdbc`, Redis in `spring-boot-data-redis` — not in
   `spring-boot-testcontainers`.
-- Test fixtures live in `support/`, which no runner scans. Adding a test should stay one
-  annotation plus a fixture call.
+- **Fixtures are the service's own**, in `support/`, marked `@Fixture` and autowired.
+  They are found by the application's component scan, so nothing imports them. Shared
+  test *infrastructure* is identical everywhere and has no domain in it; a fixture is a
+  bounded context, and sharing those is what makes a shared library an anti-pattern.
+  Write them as an object mother returning a fluent builder.
 
 ## Services
 - mugen-shared        (shared DTOs, Kafka contracts, utils)

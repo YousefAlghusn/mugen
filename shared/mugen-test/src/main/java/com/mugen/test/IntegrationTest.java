@@ -1,8 +1,13 @@
 package com.mugen.test;
 
+import com.mugen.test.support.CleanDatabaseExtension;
+import com.mugen.test.support.DatabaseCleaner;
+import com.mugen.test.support.MockMvcConfiguration;
+import com.mugen.test.support.MugenContainers;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.test.context.ActiveProfiles;
 
 import java.lang.annotation.Documented;
 import java.lang.annotation.ElementType;
@@ -11,35 +16,39 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * The full application context against real infrastructure — the only tier that can
- * see a proxy, a transaction boundary, or anything a database does that an in-memory
+ * The full application context against real infrastructure — the only tier that can see
+ * a proxy, a transaction boundary, or anything a database does that an in-memory
  * substitute does not.
  * <p>
- * <b>Not used directly.</b> Containers differ per service, so each service composes one
- * annotation over this naming its own, and every integration test in that service then
- * uses that annotation and nothing else:
+ * <b>Used directly, by every service.</b> There is nothing to compose over it and
+ * nothing to declare: the containers come from {@link MugenContainers}, which reads the
+ * service's own classpath, and {@code MockMvc} and {@link DatabaseCleaner} are wired in
+ * here.
  *
  * <pre>{@code
- * @Target(ElementType.TYPE)
- * @Retention(RetentionPolicy.RUNTIME)
  * @IntegrationTest
- * @Import(AuthContainers.class)
- * @TestPropertySource(properties = "mugen.outbox.enabled=false")
- * public @interface AuthIntegrationTest {}
+ * class RefreshRotationTest {
+ *
+ *     @Autowired private MockMvc mvc;
+ * }
  * }</pre>
  *
+ * <h2>Configuration belongs in application-test.yml, never on the class</h2>
+ * Spring caches an application context per distinct configuration and the containers are
+ * beans in that context, so <b>one test class with one extra {@code properties} entry is
+ * a second context and a second database</b>. Four classes with four nearly-identical
+ * property sets is how this suite came to start four SQL Servers.
  * <p>
- * <b>Adding {@code properties} to an individual test class is the one thing not to do
- * here.</b> Spring caches an application context per distinct configuration, and a
- * container is started per context — so one test class with one extra property is a
- * second context and a second database. Four such classes are why {@code verify} used
- * to boot four SQL Servers. If a test genuinely needs different configuration, that is
- * a deliberate second annotation with a comment saying why, not a one-off override.
+ * So this annotation activates the {@code test} profile and a service puts its test
+ * configuration in {@code src/test/resources/application-test.yml}, which layers over the
+ * service's real {@code application.yml} instead of shadowing it the way a same-named
+ * file would. Every test in the service reads the same file, so there is still one
+ * context. Genuinely needing different configuration is a real second context: give it
+ * its own annotation and a comment saying why.
  * <p>
- * One context means one database, so {@link DatabaseCleaner} empties it before each
- * test class — see {@link CleanDatabaseExtension}. Without that, a class that
- * deliberately commits leaves its rows to the next one, and any assertion phrased as a
- * total quietly starts counting them.
+ * {@code @MockitoBean} is subject to the same rule for the same reason — each distinct
+ * set of overrides is a distinct cache key. At this tier it is usually the wrong tool
+ * anyway: the point of the tier is that the wiring is real.
  * <p>
  * Two properties are set for every service. Eureka registration would have the suite
  * announcing itself to a discovery server that is not running, and tracing would export
@@ -55,7 +64,8 @@ import java.lang.annotation.Target;
         "eureka.client.enabled=false",
         "management.tracing.enabled=false"
 })
-@Import({MockMvcConfiguration.class, DatabaseCleaner.class})
+@ActiveProfiles("test")
+@Import({MugenContainers.class, MockMvcConfiguration.class, DatabaseCleaner.class})
 @ExtendWith(CleanDatabaseExtension.class)
 public @interface IntegrationTest {
 }

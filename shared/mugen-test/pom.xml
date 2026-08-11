@@ -16,10 +16,10 @@
 
     <name>mugen-test</name>
     <description>
-        The three test tiers as three annotations, plus the wiring each one needs.
-        Consumed at test scope, so a service declares this one dependency instead of
-        the six test dependencies and the fifteen-line @SpringBootTest preamble that
-        would otherwise be copied into all eleven.
+        The three test tiers as three annotations, and the infrastructure behind them.
+        A service adds this at test scope and writes @UnitTest, @SliceTest or
+        @IntegrationTest — it declares no containers, no property preamble and no
+        composed annotation of its own.
     </description>
 
     <dependencies>
@@ -30,9 +30,9 @@
         </dependency>
 
         <!--
-            Compile scope, not test: this module's whole purpose is to be a service's
-            single test dependency, and a test-scoped dependency is not transitive.
-            JUnit, AssertJ, Mockito and spring-test all arrive through this one.
+            Compile scope, not test: this module exists to be a service's single test
+            dependency, and a test-scoped dependency is not transitive. JUnit, AssertJ,
+            Mockito and spring-test all arrive through this one.
         -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -52,7 +52,7 @@
         </dependency>
         <!--
             Boot 4 moved @WebMvcTest out of spring-boot-starter-test into its own
-            module. @SliceTest is a @WebMvcTest, so it has to be here rather than
+            module. @SliceTest is a @WebMvcTest, so it belongs here rather than being
             left for each service to remember.
         -->
         <dependency>
@@ -61,8 +61,31 @@
         </dependency>
 
         <!--
-            Needed to compile MockMvcConfiguration, optional for the same reason
-            mugen-web's are: this jar must not drag a web stack into a headless
+            Every container this library knows how to start, optional so none of them
+            is forced on a service. Optional means "not transitive", and that is
+            precisely the opt-in switch: MugenContainers starts the SQL Server only for
+            a service whose own pom asks for the mssqlserver module. A service declares
+            the technology, never the container.
+        -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>mssqlserver</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>mongodb</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!--
+            Needed to compile the web and security pieces, optional for the same
+            reason mugen-web's are: this jar must not drag a web stack into a headless
             worker like mugen-transcode. Any service with controllers has both.
         -->
         <dependency>
@@ -74,6 +97,27 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-security</artifactId>
             <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!--
+            This module tests itself, against Postgres because it is the fastest real
+            database to start. Proving the tiers here rather than inside a service is
+            the point: a green run means a service needs to declare nothing at all.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-jdbc</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>test</scope>
         </dependency>
     </dependencies>
 

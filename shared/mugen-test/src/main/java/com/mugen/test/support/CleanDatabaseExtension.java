@@ -1,4 +1,4 @@
-package com.mugen.test;
+package com.mugen.test.support;
 
 import org.junit.jupiter.api.extension.BeforeAllCallback;
 import org.junit.jupiter.api.extension.ExtensionContext;
