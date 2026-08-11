@@ -1,4 +1,4 @@
-package com.mugen.auth;
+package com.mugen.auth.integration;
 
 import com.mugen.auth.dto.RequestContext;
 import com.mugen.auth.entity.OutboxEvent;
@@ -12,20 +12,14 @@ import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import com.mugen.auth.support.AuthIntegrationTest;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.test.context.DynamicPropertyRegistrar;
 import org.springframework.transaction.IllegalTransactionStateException;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
-import org.testcontainers.containers.MSSQLServerContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.time.Duration;
@@ -42,34 +36,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * its {@code UPDLOCK, READPAST, ROWLOCK} hints. {@link
  * com.mugen.auth.service.OutboxPollerTest} covers the decisions above that line.
  */
-@SpringBootTest(properties = {
-        "eureka.client.enabled=false",
-        "management.tracing.enabled=false",
-        // The poller is exercised by unit tests; leaving it running here would race
-        // this test for the very rows it is asserting on.
-        "mugen.outbox.enabled=false",
-        "spring.autoconfigure.exclude=org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration"
-})
-@Testcontainers
+@AuthIntegrationTest
 @Transactional
-class OutboxIntegrationTest {
-
-    @Container
-    @SuppressWarnings("resource") // Testcontainers manages the lifecycle.
-    static final MSSQLServerContainer<?> SQL_SERVER =
-            new MSSQLServerContainer<>("mcr.microsoft.com/mssql/server:2022-latest").acceptLicense();
-
-    @TestConfiguration
-    static class DataSourceOverride {
-        @Bean
-        DynamicPropertyRegistrar sqlServerProperties() {
-            return registry -> {
-                registry.add("spring.datasource.url", SQL_SERVER::getJdbcUrl);
-                registry.add("spring.datasource.username", SQL_SERVER::getUsername);
-                registry.add("spring.datasource.password", SQL_SERVER::getPassword);
-            };
-        }
-    }
+class OutboxTest {
 
     @Autowired
     private OutboxEventRepository outbox;

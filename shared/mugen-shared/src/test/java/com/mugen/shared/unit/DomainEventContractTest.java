@@ -1,8 +1,16 @@
-package com.mugen.shared.event;
+package com.mugen.shared.unit;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.mugen.shared.event.DomainEvent;
+import com.mugen.shared.event.PaymentCompletedEvent;
+import com.mugen.shared.event.PostCreatedEvent;
+import com.mugen.shared.event.PostLikedEvent;
+import com.mugen.shared.event.UserFollowedEvent;
+import com.mugen.shared.event.UserRegisteredEvent;
+import com.mugen.shared.event.VideoProgressEvent;
+import com.mugen.shared.event.VideoTranscodeJobEvent;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;

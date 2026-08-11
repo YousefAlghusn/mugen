@@ -27,6 +27,7 @@
     <modules>
         <module>shared/mugen-shared</module>
         <module>shared/mugen-web</module>
+        <module>shared/mugen-test</module>
         <module>services/mugen-auth</module>
     </modules>
 
@@ -96,6 +97,11 @@
             <dependency>
                 <groupId>com.mugen</groupId>
                 <artifactId>mugen-web</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.mugen</groupId>
+                <artifactId>mugen-test</artifactId>
                 <version>${project.version}</version>
             </dependency>
         </dependencies>
@@ -179,17 +185,23 @@
             </plugin>
 
             <!--
-                Unit tests (surefire, `mvn test`) stay fast and dependency-free.
-                Testcontainers-backed *IntegrationTest classes are handed to failsafe
-                and only run under `mvn verify`, which needs a Docker daemon.
+                The tier a test lives in is its directory, and that directory decides
+                which runner gets it. See shared/mugen-test's package-info for what the
+                three tiers mean and how to pick one.
+
+                Path-based rather than by class-name suffix so the two cannot disagree:
+                a file under integration/ cannot be handed to surefire by forgetting to
+                rename it. `mvn test` runs unit and slice — fast, no Docker. `mvn verify`
+                adds integration, which needs a Docker daemon for Testcontainers.
             -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
-                    <excludes>
-                        <exclude>**/*IntegrationTest.java</exclude>
-                    </excludes>
+                    <includes>
+                        <include>**/unit/**/*Test.java</include>
+                        <include>**/slice/**/*Test.java</include>
+                    </includes>
                 </configuration>
             </plugin>
             <plugin>
@@ -197,7 +209,7 @@
                 <artifactId>maven-failsafe-plugin</artifactId>
                 <configuration>
                     <includes>
-                        <include>**/*IntegrationTest.java</include>
+                        <include>**/integration/**/*Test.java</include>
                     </includes>
                 </configuration>
                 <executions>

@@ -129,7 +129,7 @@ public class OutboxEvent implements Persistable<UUID> {
      * overflows a long and wraps negative, scheduling the retry in the past and turning
      * a capped backoff into a hot loop against a broker that is already sick.
      */
-    static Duration backoffFor(int attempts, Duration initialBackoff, Duration maxBackoff) {
+    public static Duration backoffFor(int attempts, Duration initialBackoff, Duration maxBackoff) {
         int shift = Math.max(attempts - 1, 0);
         if (shift >= Long.SIZE - 1) {
             return maxBackoff;

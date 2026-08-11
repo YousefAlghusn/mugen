@@ -1,4 +1,4 @@
-package com.mugen.auth;
+package com.mugen.auth.integration;
 
 import com.mugen.auth.entity.OAuthLink;
 import com.mugen.auth.entity.OAuthProvider;
@@ -7,18 +7,12 @@ import com.mugen.auth.entity.User;
 import com.mugen.auth.repository.OAuthLinkRepository;
 import com.mugen.auth.repository.SessionRepository;
 import com.mugen.auth.repository.UserRepository;
+import com.mugen.auth.support.AuthIntegrationTest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.test.context.DynamicPropertyRegistrar;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
 import org.springframework.transaction.annotation.Transactional;
-import org.testcontainers.containers.MSSQLServerContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -38,37 +32,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * with {@code ddl-auto: validate}, so a column this service's entities expect but
  * no migration creates fails the test at startup.
  */
-@SpringBootTest(properties = {
-        // Nothing here should reach out to infrastructure this test does not own.
-        "eureka.client.enabled=false",
-        "management.tracing.enabled=false",
-        "mugen.outbox.enabled=false",
-        "spring.autoconfigure.exclude=org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration"
-})
-@Testcontainers
-// Rolls back after each test, so the container is reused across the class without
-// one test's rows leaking into the next. Also supplies the transaction that
-// @Modifying repository methods need in order to flush.
+@AuthIntegrationTest
+// Rolls back after each test, so one test's rows never leak into the next. Also
+// supplies the transaction that @Modifying repository methods need in order to flush.
 @Transactional
-class SchemaIntegrationTest {
-
-    @Container
-    @SuppressWarnings("resource") // Testcontainers manages the lifecycle.
-    static final MSSQLServerContainer<?> SQL_SERVER =
-            new MSSQLServerContainer<>("mcr.microsoft.com/mssql/server:2022-latest")
-                    .acceptLicense();
-
-    @TestConfiguration
-    static class DataSourceOverride {
-        @Bean
-        DynamicPropertyRegistrar sqlServerProperties() {
-            return registry -> {
-                registry.add("spring.datasource.url", SQL_SERVER::getJdbcUrl);
-                registry.add("spring.datasource.username", SQL_SERVER::getUsername);
-                registry.add("spring.datasource.password", SQL_SERVER::getPassword);
-            };
-        }
-    }
+class SchemaTest {
 
     @Autowired
     private UserRepository users;

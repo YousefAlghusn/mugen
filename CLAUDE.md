@@ -80,6 +80,41 @@ easier, and reads as noise once there are eleven services of it.
 - **Never a banner or a section divider.** `// ===== Services =====` in a pom or a
   class is structure the file already has.
 
+## Testing
+Three tiers. **A test belongs to the lowest tier that can see the failure it is
+written for** — that is the whole rule, and the tiers exist so "lowest" has an answer.
+
+The tier is the **directory**, and the directory is what picks the runner, so the two
+cannot disagree by forgetting to rename a class:
+
+| Tier | `src/test/java/<base>/…` | Annotation | Runner | Sees |
+|---|---|---|---|---|
+| unit | `unit/` | `@UnitTest` | surefire | decisions — a rule, a mapping, a state machine. No Spring. |
+| slice | `slice/` | `@SliceTest(Controller.class)` | surefire | the HTTP contract: status, headers, cookie attributes, problem bodies |
+| integration | `integration/` | `@<Service>IntegrationTest` | failsafe | proxies, transactions, real database semantics |
+
+- **`shared/mugen-test` owns the tiers**, the way `mugen-web` owns the error contract.
+  A service declares it once at test scope and gets JUnit, AssertJ, Mockito,
+  spring-test, spring-security-test, `@WebMvcTest` and Testcontainers with it. The tier
+  definitions live in its `package-info.java` — read that before adding a test.
+- **Anything a proxy implements is invisible below the integration tier.**
+  `@Transactional`, `@Async`, `@Cacheable`, `@PreAuthorize` — a test that builds its
+  subject with `new` has no proxy, so the annotation is inert and the test cannot tell
+  you. This cost this project a `@Transactional` that had never once applied, under 23
+  green unit tests. There is no shortcut: it needs a Spring context.
+- **Containers are per service, tiers are not.** Each service writes one
+  `<Service>Containers` `@TestConfiguration` and one composed annotation over
+  `@IntegrationTest`, and every integration test in it then uses that annotation
+  **unmodified**. Spring caches a context per distinct configuration and the containers
+  are beans in it, so uniform annotations mean one context and one database for the
+  whole run — four classes with four slightly different property sets meant four of each.
+- `@ServiceConnection` supplies `spring.datasource.*` and `spring.data.redis.*` from the
+  running container. Its factories are split per technology in Boot 4 — JDBC in
+  `spring-boot-jdbc`, Redis in `spring-boot-data-redis` — not in
+  `spring-boot-testcontainers`.
+- Test fixtures live in `support/`, which no runner scans. Adding a test should stay one
+  annotation plus a fixture call.
+
 ## Services
 - mugen-shared        (shared DTOs, Kafka contracts, utils)
 - mugen-auth          (JWT, SSO, sessions — SQL Server)
@@ -207,8 +242,8 @@ pins Maven 3.9.9 and there may be no Maven installed at all.
 - Start service:    cd services/mugen-auth && ../../mvnw spring-boot:run
                     (runs on the host against the dockerized infra; the default
                      profile points at localhost — see "Dev vs deploy" above)
-- Unit tests:       ./mvnw test                  (fast, no Docker needed)
-- All tests:        ./mvnw verify                (adds *IntegrationTest via
+- Unit tests:       ./mvnw test                  (unit + slice tiers, no Docker)
+- All tests:        ./mvnw verify                (adds the integration tier via
                      failsafe — needs a running Docker daemon for Testcontainers)
 - Build:            ./mvnw clean package -DskipTests
 

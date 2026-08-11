@@ -1,10 +1,12 @@
-package com.mugen.auth.service;
+package com.mugen.auth.unit;
 
 import com.mugen.auth.config.JwtProperties;
 import com.mugen.auth.entity.Session;
 import com.mugen.auth.entity.User;
 import com.mugen.auth.exception.AuthExceptions;
 import com.mugen.auth.repository.SessionRepository;
+import com.mugen.auth.service.RevocationCacheService;
+import com.mugen.auth.service.SessionService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

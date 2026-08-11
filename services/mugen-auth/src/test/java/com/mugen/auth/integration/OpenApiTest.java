@@ -1,26 +1,17 @@
-package com.mugen.auth;
+package com.mugen.auth.integration;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mugen.auth.support.AuthIntegrationTest;
 import com.mugen.shared.error.ErrorCode;
 import com.mugen.web.security.PublicEndpoint;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
 import org.springframework.core.annotation.AnnotatedElementUtils;
-import org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers;
-import org.springframework.test.context.DynamicPropertyRegistrar;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
-import org.testcontainers.containers.MSSQLServerContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.util.HashSet;
 import java.util.Locale;
@@ -48,33 +39,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * springdoc actually serves. Change either alone and the docs answer 401 — reachable
  * in every developer's browser only because they happen to be logged in.
  */
-@SpringBootTest(properties = {
-        "eureka.client.enabled=false",
-        "management.tracing.enabled=false",
-        "mugen.outbox.enabled=false",
-        // No Redis container here: nothing in this test touches the revocation cache,
-        // and Lettuce connects lazily, so the context starts without a server.
-        "spring.autoconfigure.exclude=org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration"
-})
-@Testcontainers
-class OpenApiIntegrationTest {
-
-    @Container
-    @SuppressWarnings("resource") // Testcontainers manages the lifecycle.
-    static final MSSQLServerContainer<?> SQL_SERVER =
-            new MSSQLServerContainer<>("mcr.microsoft.com/mssql/server:2022-latest").acceptLicense();
-
-    @TestConfiguration
-    static class Containers {
-        @Bean
-        DynamicPropertyRegistrar containerProperties() {
-            return registry -> {
-                registry.add("spring.datasource.url", SQL_SERVER::getJdbcUrl);
-                registry.add("spring.datasource.username", SQL_SERVER::getUsername);
-                registry.add("spring.datasource.password", SQL_SERVER::getPassword);
-            };
-        }
-    }
+@AuthIntegrationTest
+class OpenApiTest {
 
     @Autowired
     private WebApplicationContext context;
@@ -82,19 +48,8 @@ class OpenApiIntegrationTest {
     @Autowired
     private ObjectMapper objectMapper;
 
+    @Autowired
     private MockMvc mockMvc;
-
-    /**
-     * {@code springSecurity()} is the whole point of the reachability assertions — it
-     * installs the real filter chain. Without it every path would answer 200 and the
-     * "no token needed" claims below would pass for the wrong reason.
-     */
-    @BeforeEach
-    void setUpMockMvc() {
-        mockMvc = MockMvcBuilders.webAppContextSetup(context)
-                .apply(SecurityMockMvcConfigurers.springSecurity())
-                .build();
-    }
 
     private JsonNode document() throws Exception {
         String body = mockMvc.perform(get("/v3/api-docs"))

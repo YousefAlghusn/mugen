@@ -1,8 +1,9 @@
-package com.mugen.auth.service;
+package com.mugen.auth.unit;
 
 import com.mugen.auth.config.OutboxProperties;
 import com.mugen.auth.entity.OutboxEvent;
 import com.mugen.auth.repository.OutboxEventRepository;
+import com.mugen.auth.service.OutboxPoller;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -33,7 +34,7 @@ import static org.mockito.Mockito.when;
  * The poller's decisions, with the broker and the database mocked out: what gets
  * marked published, what gets rescheduled, and what a single bad event does to the
  * rest of its batch. The SQL that claims the rows is proven separately, in
- * {@link com.mugen.auth.OutboxIntegrationTest}, because table hints only mean
+ * {@link com.mugen.auth.OutboxTest}, because table hints only mean
  * something against a real SQL Server.
  */
 @ExtendWith(MockitoExtension.class)

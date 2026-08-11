@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.mugen</groupId>
+        <artifactId>mugen-parent</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>mugen-test</artifactId>
+    <packaging>jar</packaging>
+
+    <name>mugen-test</name>
+    <description>
+        The three test tiers as three annotations, plus the wiring each one needs.
+        Consumed at test scope, so a service declares this one dependency instead of
+        the six test dependencies and the fifteen-line @SpringBootTest preamble that
+        would otherwise be copied into all eleven.
+    </description>
+
+    <dependencies>
+        <!-- @SliceTest imports GlobalExceptionHandler, which lives here. -->
+        <dependency>
+            <groupId>com.mugen</groupId>
+            <artifactId>mugen-web</artifactId>
+        </dependency>
+
+        <!--
+            Compile scope, not test: this module's whole purpose is to be a service's
+            single test dependency, and a test-scoped dependency is not transitive.
+            JUnit, AssertJ, Mockito and spring-test all arrive through this one.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-testcontainers</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-test</artifactId>
+        </dependency>
+        <!--
+            Boot 4 moved @WebMvcTest out of spring-boot-starter-test into its own
+            module. @SliceTest is a @WebMvcTest, so it has to be here rather than
+            left for each service to remember.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-webmvc-test</artifactId>
+        </dependency>
+
+        <!--
+            Needed to compile MockMvcConfiguration, optional for the same reason
+            mugen-web's are: this jar must not drag a web stack into a headless
+            worker like mugen-transcode. Any service with controllers has both.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+            <optional>true</optional>
+        </dependency>
+    </dependencies>
+
+</project>

@@ -4,6 +4,17 @@ Companion to tasks.md, which is the checklist. This file holds only what the cod
 and git history do NOT already say: live status, decisions and their reasoning,
 and traps worth not rediscovering.
 
+## Status (2026-08-11)
+**The test suite has a structure now** — three tiers, `shared/mugen-test`, one context
+and one container for the whole run. See "Test tiers" below and the `Testing` section
+in CLAUDE.md. Nothing was deleted: 110 unit + slice and 44 integration, the same tests
+as before, `./mvnw verify` green in ~45s.
+
+What that leaves for 2.13 is the half it is actually named for: **the bar a test has to
+meet**, and the pruning that follows from it. The named offenders are unchanged in
+tasks.md, and `OpenApiTest` is still 319 lines that boot a database to assert a document
+title and three sentences of javadoc prose.
+
 ## Status (paused 2026-08-04)
 **Real Google SSO works end to end.** Credentials from a Google Cloud OAuth client,
 `sso` profile activated for the first time, a real sign-in completed, and the account
@@ -75,7 +86,7 @@ Three items, in the order they are worth doing (updated 2026-08-08):
 1. **Regression suite holes** — no controller tests for AuthController /
    SessionController, none for RevocationCacheService or AuthorizationRequestStore, none
    for GoogleProfileMapper. TokenIntrospectController and both SSO endpoints are now
-   covered at the filter-chain level by `OpenApiIntegrationTest`, but only for
+   covered at the filter-chain level by `OpenApiTest`, but only for
    reachability, not behaviour. Two named holes join this: a test that can see a proxy
    boundary, and the cross-provider `state` test removed with GitHub.
 2. **Decide the revocation question** below, then finish the quality review. The review
@@ -135,6 +146,40 @@ than receiving a push — a UX difference, not a backend one.
 Rejected: a mock Nafath module. This project's whole 2.11 gate exists because
 stubbed providers hid a `@Transactional` that had never applied. A mock agrees with
 whatever we assumed, and being surprised is the point.
+
+## Test tiers (2026-08-11)
+The rule is one sentence — **a test belongs to the lowest tier that can see the failure
+it is written for** — and the tiers exist so that "lowest" has an answer. The tier is
+the directory (`unit/`, `slice/`, `integration/`), and the directory is what selects
+surefire or failsafe, so the two cannot drift apart by forgetting a rename.
+
+What is worth knowing beyond CLAUDE.md's summary:
+
+- **The container count was a context-cache problem, not a Testcontainers one.** Four
+  test classes each had a `@SpringBootTest(properties = ...)` that differed slightly —
+  one excluded Redis autoconfiguration, another did not — and Spring keys its context
+  cache on exactly that. Four keys, four contexts, four SQL Servers. Making every
+  integration test carry one identical annotation is the whole fix; the containers
+  being `@Bean`s in the cached context follows. This is why `@IntegrationTest` says not
+  to add `properties` to an individual class: it silently costs a database.
+- **One shared database has a price, and it is real.** `AuthFlowTest` cannot be
+  `@Transactional` — it asserts on a committed revocation — so its rows outlive it.
+  Per-class containers had been hiding that; six assertions phrased as totals
+  (`users.count()).isZero()`) failed the moment the container was shared. `DatabaseCleaner`
+  empties the schema before each test class, which restores exactly the isolation the
+  old layout gave by accident. Per class, not per test: per test would land inside a
+  transaction `@Transactional` had already opened.
+- **`@ServiceConnection`'s factories are split per technology in Boot 4** — JDBC in
+  `spring-boot-jdbc`, Redis in `spring-boot-data-redis`, none of them in
+  `spring-boot-testcontainers`. Fourth instance of the same Boot 4 trap; a service gets
+  the factory only because it already depends on the technology.
+- **A composed annotation carries `@MockitoBean` and stacked `@Import`s correctly.**
+  `@AuthSliceTest` supplies the `JwtDecoder` mock every slice in this service needed,
+  and `@AuthIntegrationTest`'s `@Import` merges with the one on `@IntegrationTest`
+  rather than replacing it. Both verified by running, not assumed.
+- **Package-private members are unreachable from a tier folder.** `OutboxEvent.backoffFor`
+  had to become public to keep its overflow test. One case is a fair price; a second
+  would mean the tier layout is wrong for this project, so count them.
 
 ## The transaction that was never there (2026-08-04)
 The first real Google sign-in answered 500 with

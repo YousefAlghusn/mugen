@@ -187,38 +187,21 @@
         </dependency>
 
         <!-- ================================= Test =================================== -->
+        <!--
+            The three tiers and everything they need: JUnit, AssertJ, Mockito,
+            spring-test, spring-security-test, the @WebMvcTest slice module and
+            Testcontainers' JUnit integration all arrive through this one dependency.
+        -->
         <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-test</artifactId>
+            <groupId>com.mugen</groupId>
+            <artifactId>mugen-test</artifactId>
             <scope>test</scope>
         </dependency>
         <!--
-            Boot 4 split the test slices per technology the same way it split
-            autoconfiguration: @WebMvcTest moved out of spring-boot-test-autoconfigure
-            into its own module and is no longer pulled in by
-            spring-boot-starter-test. Without this the annotation simply does not
-            resolve (org.springframework.boot.webmvc.test.autoconfigure).
+            The container image is the service's own business — mugen-auth is SQL
+            Server, mugen-user will be Postgres — so it stays here rather than in
+            mugen-test. See AuthContainers.
         -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-webmvc-test</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.security</groupId>
-            <artifactId>spring-security-test</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-testcontainers</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.testcontainers</groupId>
-            <artifactId>junit-jupiter</artifactId>
-            <scope>test</scope>
-        </dependency>
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>mssqlserver</artifactId>

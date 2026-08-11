@@ -1,23 +1,24 @@
-package com.mugen.auth.controller;
+package com.mugen.auth.slice;
 
 import com.mugen.auth.config.JwtProperties;
 import com.mugen.auth.config.RefreshCookieProperties;
 import com.mugen.auth.config.SsoProperties;
+import com.mugen.auth.controller.RefreshTokenCookies;
+import com.mugen.auth.controller.SsoController;
+import com.mugen.auth.controller.SsoStateCookies;
 import com.mugen.auth.dto.TokenPair;
 import com.mugen.auth.entity.OAuthProvider;
 import com.mugen.auth.exception.AuthExceptions;
 import com.mugen.auth.oauth.PendingAuthorization;
 import com.mugen.auth.service.OAuthService;
-import com.mugen.web.error.GlobalExceptionHandler;
+import com.mugen.auth.support.AuthSliceTest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.core.io.ByteArrayResource;
-import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -41,12 +42,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * verifier — and about the cookie attributes, which are the whole security model of
  * this flow and are invisible from a service-level test.
  */
-// GlobalExceptionHandler is imported by hand: it reaches a running service through
-// mugen-web's auto-configuration, and @WebMvcTest applies only the slice's own list
-// of auto-configurations. Without it the two problem-document assertions below would
-// see the raw exception escape instead.
-@WebMvcTest(SsoController.class)
-@Import({SsoControllerTest.CookieComponents.class, GlobalExceptionHandler.class})
+@AuthSliceTest(SsoController.class)
+@Import(SsoControllerTest.CookieComponents.class)
 class SsoControllerTest {
 
     private static final String FRONTEND = "http://localhost:4200/auth/callback";
@@ -56,10 +53,6 @@ class SsoControllerTest {
 
     @MockitoBean
     private OAuthService oauthService;
-
-    /** SecurityConfig's resource server needs one; nothing here presents a token. */
-    @MockitoBean
-    private JwtDecoder jwtDecoder;
 
     /**
      * Real cookie builders rather than mocks — the attributes they emit are exactly

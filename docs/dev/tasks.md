@@ -81,7 +81,7 @@ for the next.
 - [x] User entity + UserRepository
 - [x] Session entity + SessionRepository
 - [x] OAuthLink entity + OAuthLinkRepository
-- [x] (extra) SchemaIntegrationTest — 9 tests proving the migrations and the JPA
+- [x] (extra) SchemaTest — 9 tests proving the migrations and the JPA
       mappings agree against a real SQL Server via Testcontainers. This is what
       caught the two Boot 4 issues below.
 
@@ -179,9 +179,9 @@ for the next.
 ### 2.9 Tests
 - [x] JwtServiceTest (sign, verify, tampered token, expired, wrong key, type confusion)
 - [x] SessionServiceTest (rotation, replay attack detection)
-- [x] AuthFlowIntegrationTest (Testcontainers SQL Server + Redis) — full
+- [x] AuthFlowTest (Testcontainers SQL Server + Redis) — full
       register/login/refresh/replay/logout flow
-- [x] SchemaIntegrationTest (Testcontainers SQL Server)
+- [x] SchemaTest (Testcontainers SQL Server)
 - [x] OAuthServiceTest (23 tests — PKCE, single-use and provider-bound state,
       browser-nonce binding, and the linking rules that decide whether a provider
       identity may be attached to an existing account)
@@ -190,7 +190,7 @@ for the next.
       invisible from a service-level test)
 - [x] (extra) OutboxEventTest, UserEventPublisherTest, OutboxPollerTest — backoff
       overflow, payload contract, and what one poison event does to its batch
-- [x] (extra) OutboxIntegrationTest (Testcontainers SQL Server) — the half that
+- [x] (extra) OutboxTest (Testcontainers SQL Server) — the half that
       only exists against a real server: the ISJSON constraint and the native
       claim query, whose whole meaning is its table hints
 
@@ -231,7 +231,7 @@ shape it takes gets copied into the other ten.
       `JwtProperties` rather than from literals — the cookie name and the TTLs the
       docs promise are the ones the service actually uses, and cannot go stale
       behind a rename
-- [x] (extra) OpenApiIntegrationTest — the document is generated, is readable with
+- [x] (extra) OpenApiTest — the document is generated, is readable with
       no token, excludes `/actuator`, declares both security schemes, and marks
       exactly the token-protected operations. Guards the one pairing nothing else
       would catch: the springdoc paths permitted in SecurityConfig against the
@@ -387,6 +387,39 @@ is not coverage, it is that **some tests assert things that were never claims**,
 those break on harmless edits while catching no defect. A suite that cries wolf on a
 rename gets ignored on the one day it is right.
 
+#### Structure — done 2026-08-11
+The tiers and the shared wiring, with no test deleted and the counts unchanged
+(110 unit + slice, 44 integration, `./mvnw verify` green in ~45s).
+
+- [x] **`shared/mugen-test`** — the three tiers as three annotations, plus what each
+      needs. A service declares it once at test scope instead of six test dependencies;
+      mugen-auth's pom lost five. Tier definitions live in its `package-info.java`.
+- [x] **Tier is the directory**, and the directory picks the runner: `unit/` and
+      `slice/` to surefire, `integration/` to failsafe, by path rather than class-name
+      suffix so the two cannot disagree. `*IntegrationTest` suffixes dropped
+      accordingly — `AuthFlowIntegrationTest` is now `integration/AuthFlowTest`.
+- [x] **One context and one container for the whole run, not four.** Every integration
+      test uses `@AuthIntegrationTest` unmodified, so Spring caches a single context and
+      the containers are beans in it. `verify` started 4 SQL Servers before this and
+      starts 1 now — the 40-container problem below, closed before it arrived.
+- [x] **`@ServiceConnection` replaces the `DynamicPropertyRegistrar` blocks**, four
+      copies of them. Note the Boot 4 split: the factories are in `spring-boot-jdbc` and
+      `spring-boot-data-redis`, not in `spring-boot-testcontainers`.
+- [x] **`AuthFixtures`** — a registered, signed-in user in one line, replacing five
+      private helpers that lived inside `AuthFlowTest` where nothing else could use them.
+      It reads the refresh cookie by the configured name rather than a literal.
+- [x] **`DatabaseCleaner`** — the cost of one shared database, paid once. A class that
+      deliberately commits (`AuthFlowTest` must) used to be isolated by having its own
+      container; now the database is emptied before each test class instead. Six
+      assertions phrased as totals failed exactly once and are unchanged.
+- [x] A `Testing` section in CLAUDE.md covering the tier rule and the container
+      reasoning. **The bar for what a test must earn is not written yet** — that is the
+      pruning pass below, and it is still the deliverable this item is named for.
+- One production change: `OutboxEvent.backoffFor` went package-private → public,
+  because the unit tier cannot reach a package-private member from `unit/`. It is a
+  pure, documented function and its overflow test is worth keeping. **Revisit if a
+  second case appears** — two would mean the tier layout is wrong, not the modifier.
+
 **The distinction to settle first.** A test earns its place by failing when behaviour
 breaks. Three failure modes to name and then hunt:
 
@@ -399,11 +432,11 @@ breaks. Three failure modes to name and then hunt:
   *added*, which is exactly when the rule needs enforcing.
 
 Against: an **invariant** test, which states the rule and covers cases not written
-yet. `OpenApiIntegrationTest.documentAgreesWithTheFilterChain` is the model — "an
+yet. `OpenApiTest.documentAgreesWithTheFilterChain` is the model — "an
 operation advertises `bearerAuth` exactly when its handler is not `@PublicEndpoint`"
 holds for every endpoint mugen will ever have.
 
-**Concrete offenders found while looking, all in `OpenApiIntegrationTest`:**
+**Concrete offenders found while looking, all in `OpenApiTest`:**
 - [ ] `documentsThePublicApi` hand-lists 8 paths. Delete or invert it — if springdoc
       found no controllers, four other tests in the file already fail.
 - [ ] `apiDocsArePublic` asserts `info.title == "Mugen Auth API"`. Pure restatement of
@@ -423,14 +456,15 @@ holds for every endpoint mugen will ever have.
       endpoints that do not exist yet. Derive the list from the same annotation scan.
 
 **Wider, and the reason this is its own item:**
-- [ ] **43 hardcoded `/api/v1/auth/...` literals** across `AuthFlowIntegrationTest`,
-      `OpenApiIntegrationTest` and `SsoControllerTest`. A path change is a 43-line
+- [ ] **43 hardcoded `/api/v1/auth/...` literals** across `AuthFlowTest`,
+      `OpenApiTest` and `SsoControllerTest`. A path change is a 43-line
       edit today. Decide whether that is fine (paths are a public contract, and
       pinning them is arguably the point) or whether it wants constants — but decide
       it, rather than inheriting it ten more times.
-- [ ] **Four `@SpringBootTest` + Testcontainers classes, each starting its own SQL
-      Server.** `OpenApiIntegrationTest` needs a database only because the context
-      wants a datasource. Look at context reuse before this becomes 40 containers.
+- [x] **Four `@SpringBootTest` + Testcontainers classes, each starting its own SQL
+      Server.** Closed 2026-08-11 by the structure pass above: one shared annotation,
+      one cached context, one container. `OpenApiTest` still needs a database only
+      because the context wants a datasource — but it no longer costs a container.
 - [ ] **Decide the coverage bar.** Not "everything". Candidates: security decisions,
       state machines, anything with a silent failure mode, anything a proxy boundary
       could disable. Explicitly *not*: configuration literals, framework behaviour,

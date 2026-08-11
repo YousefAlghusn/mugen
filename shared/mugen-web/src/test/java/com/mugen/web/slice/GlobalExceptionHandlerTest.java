@@ -1,4 +1,4 @@
-package com.mugen.web.error;
+package com.mugen.web.slice;
 
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
@@ -6,6 +6,9 @@ import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import com.mugen.shared.error.ErrorCode;
 import com.mugen.shared.trace.TraceIdHolder;
+import com.mugen.web.error.AppException;
+import com.mugen.web.error.ConflictException;
+import com.mugen.web.error.GlobalExceptionHandler;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;

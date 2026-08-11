@@ -1,4 +1,4 @@
-package com.mugen.auth.service;
+package com.mugen.auth.unit;
 
 import com.mugen.auth.config.SsoProperties;
 import com.mugen.auth.dto.RequestContext;
@@ -14,6 +14,9 @@ import com.mugen.auth.oauth.OAuthUserProfile;
 import com.mugen.auth.oauth.PendingAuthorization;
 import com.mugen.auth.repository.OAuthLinkRepository;
 import com.mugen.auth.repository.UserRepository;
+import com.mugen.auth.service.AuthService;
+import com.mugen.auth.service.OAuthService;
+import com.mugen.auth.service.UserEventPublisher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;

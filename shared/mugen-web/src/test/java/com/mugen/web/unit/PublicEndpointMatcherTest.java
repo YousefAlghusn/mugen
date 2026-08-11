@@ -1,5 +1,7 @@
-package com.mugen.web.security;
+package com.mugen.web.unit;
 
+import com.mugen.web.security.PublicEndpoint;
+import com.mugen.web.security.PublicEndpointMatcher;
 import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

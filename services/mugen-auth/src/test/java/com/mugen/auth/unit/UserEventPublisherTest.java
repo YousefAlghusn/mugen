@@ -1,8 +1,9 @@
-package com.mugen.auth.service;
+package com.mugen.auth.unit;
 
 import com.mugen.auth.entity.OutboxEvent;
 import com.mugen.auth.entity.User;
 import com.mugen.auth.repository.OutboxEventRepository;
+import com.mugen.auth.service.UserEventPublisher;
 import com.mugen.shared.event.UserRegisteredEvent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;

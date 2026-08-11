@@ -1,5 +1,6 @@
-package com.mugen.shared.trace;
+package com.mugen.shared.unit;
 
+import com.mugen.shared.trace.TraceIdHolder;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
