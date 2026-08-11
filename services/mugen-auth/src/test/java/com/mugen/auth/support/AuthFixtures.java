@@ -1,6 +1,7 @@
 package com.mugen.auth.support;
 
 import com.mugen.auth.config.RefreshCookieProperties;
+import com.mugen.test.Fixture;
 import jakarta.servlet.http.Cookie;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -21,6 +22,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
  * tests must do without, because a committed revocation is the behaviour they exist to
  * check and a rollback would erase it.
  */
+@Fixture
 public class AuthFixtures {
 
     /** Long enough to satisfy the registration constraint, and constant so failures read the same way. */

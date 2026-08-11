@@ -12,7 +12,7 @@ import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import com.mugen.auth.support.AuthIntegrationTest;
+import com.mugen.test.IntegrationTest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.transaction.IllegalTransactionStateException;
@@ -36,7 +36,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * its {@code UPDLOCK, READPAST, ROWLOCK} hints. {@link
  * com.mugen.auth.service.OutboxPollerTest} covers the decisions above that line.
  */
-@AuthIntegrationTest
+@IntegrationTest
 @Transactional
 class OutboxTest {
 

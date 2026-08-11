@@ -11,7 +11,7 @@ import com.mugen.auth.entity.OAuthProvider;
 import com.mugen.auth.exception.AuthExceptions;
 import com.mugen.auth.oauth.PendingAuthorization;
 import com.mugen.auth.service.OAuthService;
-import com.mugen.auth.support.AuthSliceTest;
+import com.mugen.test.SliceTest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -42,7 +42,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * verifier — and about the cookie attributes, which are the whole security model of
  * this flow and are invisible from a service-level test.
  */
-@AuthSliceTest(SsoController.class)
+@SliceTest(SsoController.class)
 @Import(SsoControllerTest.CookieComponents.class)
 class SsoControllerTest {
 

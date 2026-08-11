@@ -1,0 +1,10 @@
+# Test configuration for every tier, layered over the service's real application.yml.
+# One file rather than per-class properties: the integration tier caches one application
+# context, and a property set that differs per class is a second context and a second
+# database. See com.mugen.test.IntegrationTest.
+mugen:
+  outbox:
+    # Registration still writes its outbox row - that is part of the flow under test.
+    # Only the draining is off: there is no broker here, so a running poller would retry
+    # against nothing, hold connections, and race the tests asserting on those rows.
+    enabled: false

@@ -3,7 +3,7 @@ package com.mugen.auth.integration;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mugen.auth.support.AuthFixtures;
-import com.mugen.auth.support.AuthIntegrationTest;
+import com.mugen.test.IntegrationTest;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -31,7 +31,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * under test. Isolation comes from {@link AuthFixtures} minting a fresh identity per
  * call instead.
  */
-@AuthIntegrationTest
+@IntegrationTest
 class AuthFlowTest {
 
     @Autowired

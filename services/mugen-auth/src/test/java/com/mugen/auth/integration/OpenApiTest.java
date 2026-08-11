@@ -2,7 +2,7 @@ package com.mugen.auth.integration;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.mugen.auth.support.AuthIntegrationTest;
+import com.mugen.test.IntegrationTest;
 import com.mugen.shared.error.ErrorCode;
 import com.mugen.web.security.PublicEndpoint;
 import org.junit.jupiter.api.DisplayName;
@@ -39,7 +39,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * springdoc actually serves. Change either alone and the docs answer 401 — reachable
  * in every developer's browser only because they happen to be logged in.
  */
-@AuthIntegrationTest
+@IntegrationTest
 class OpenApiTest {
 
     @Autowired

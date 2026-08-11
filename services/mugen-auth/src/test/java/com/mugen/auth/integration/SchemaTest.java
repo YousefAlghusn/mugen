@@ -7,7 +7,7 @@ import com.mugen.auth.entity.User;
 import com.mugen.auth.repository.OAuthLinkRepository;
 import com.mugen.auth.repository.SessionRepository;
 import com.mugen.auth.repository.UserRepository;
-import com.mugen.auth.support.AuthIntegrationTest;
+import com.mugen.test.IntegrationTest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,7 +32,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * with {@code ddl-auto: validate}, so a column this service's entities expect but
  * no migration creates fails the test at startup.
  */
-@AuthIntegrationTest
+@IntegrationTest
 // Rolls back after each test, so one test's rows never leak into the next. Also
 // supplies the transaction that @Modifying repository methods need in order to flush.
 @Transactional
