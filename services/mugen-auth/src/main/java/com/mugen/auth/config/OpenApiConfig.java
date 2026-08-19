@@ -6,7 +6,8 @@ import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.info.License;
 import io.swagger.v3.oas.models.security.SecurityScheme;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.boot.info.BuildProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -15,51 +16,33 @@ import org.springframework.context.annotation.Configuration;
  * <p>
  * Written as a bean rather than {@code @OpenAPIDefinition} on the application class
  * so the values that also exist as configuration — the refresh cookie's name, the
- * token TTLs — are read from the same properties the running service uses. An
+ * token TTLs, the build's version — are read from what the running service uses. An
  * annotation would have to restate them as literals, and a literal is a copy that
  * goes stale silently: the docs would keep promising {@code mugen_refresh} long
  * after someone renamed the cookie.
  * <p>
  * Two schemes are declared, because this service authenticates two different ways
- * and only one of them is a header a caller can type in. See the field javadocs.
+ * and only one of them is a header a caller can type in. See {@link AuthApiDocs}.
  */
 @Configuration(proxyBeanMethods = false)
 public class OpenApiConfig {
 
-    /**
-     * The scheme behind Swagger UI's "Authorize" button — HTTP bearer, {@code JWT}
-     * format, which is what makes the UI send {@code Authorization: Bearer <token>}.
-     * Named in mugen-web because {@code SecurityRequirementCustomizer} attaches this
-     * same name to every secured operation.
-     */
-    public static final String BEARER_SCHEME = MugenApiDocs.BEARER_SCHEME;
-
-    /**
-     * The refresh token. Documented as a cookie scheme rather than a parameter
-     * because that is what it is — it never appears in a body or a header, and
-     * {@code /refresh} and {@code /logout} take no visible input at all without it.
-     * <p>
-     * Swagger UI cannot drive this one: the cookie is {@code HttpOnly}, so script
-     * cannot set it, and browsers refuse {@code Cookie} as a fetch header. It is
-     * declared so the contract is complete and so the two endpoints do not read as
-     * though they need nothing — actually exercising them means letting the browser
-     * replay the cookie a prior {@code /login} set.
-     */
-    public static final String REFRESH_COOKIE_SCHEME = "refreshCookie";
-
     @Bean
     OpenAPI authOpenApi(RefreshCookieProperties refreshCookieProperties,
                         JwtProperties jwtProperties,
-                        @Value("${spring.application.version:0.1.0-SNAPSHOT}") String applicationVersion) {
+                        ObjectProvider<BuildProperties> buildProperties) {
 
         return new OpenAPI()
                 .info(new Info()
                         .title("Mugen Auth API")
-                        .version(applicationVersion)
+                        .version(version(buildProperties))
                         .description(description(refreshCookieProperties, jwtProperties))
                         .license(new License().name("Apache-2.0")))
                 .components(new Components()
-                        .addSecuritySchemes(BEARER_SCHEME, new SecurityScheme()
+                        // HTTP bearer with a JWT format is what makes the UI's "Authorize"
+                        // send an Authorization header; the name is mugen-web's because
+                        // SecurityRequirementCustomizer attaches it to every secured operation.
+                        .addSecuritySchemes(MugenApiDocs.BEARER_SCHEME, new SecurityScheme()
                                 .type(SecurityScheme.Type.HTTP)
                                 .scheme("bearer")
                                 .bearerFormat("JWT")
@@ -67,13 +50,23 @@ public class OpenApiConfig {
                                         The access token from `/register`, `/login` or `/refresh`. \
                                         RS256, signed by this service; every other service verifies \
                                         it with `public.pem` and never calls back here."""))
-                        .addSecuritySchemes(REFRESH_COOKIE_SCHEME, new SecurityScheme()
+                        .addSecuritySchemes(AuthApiDocs.REFRESH_COOKIE_SCHEME, new SecurityScheme()
                                 .type(SecurityScheme.Type.APIKEY)
                                 .in(SecurityScheme.In.COOKIE)
                                 .name(refreshCookieProperties.name())
                                 .description("""
                                         Set by this service, sent back by the browser. `HttpOnly`, \
                                         so it cannot be supplied from Swagger UI.""")));
+    }
+
+    /**
+     * The artifact's own version, written by the {@code build-info} goal. Absent only
+     * when the application is started without Maven having run, which is a developer's
+     * IDE and not somewhere the published version means anything.
+     */
+    private static String version(ObjectProvider<BuildProperties> buildProperties) {
+        BuildProperties build = buildProperties.getIfAvailable();
+        return build == null ? "dev" : build.getVersion();
     }
 
     /**

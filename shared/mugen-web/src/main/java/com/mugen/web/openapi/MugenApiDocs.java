@@ -11,14 +11,10 @@ public final class MugenApiDocs {
     public static final String BEARER_SCHEME = "bearerAuth";
 
     /**
-     * Reusable {@code components.responses} entry for an RFC 9457 failure. Referenced
-     * from an operation as {@code @ApiResponse(responseCode = "409", ref = PROBLEM_REF)},
-     * which is the whole point — one line instead of a nested @Content and @Schema.
+     * The RFC 9457 body every failure has. Referenced from inside a response's media
+     * type by {@code ApiErrorResponsesCustomizer} — never as the response itself, since
+     * OpenAPI drops a {@code $ref}'s siblings and the description would go with them.
      */
-    public static final String PROBLEM_RESPONSE = "Problem";
-
-    public static final String PROBLEM_REF = "#/components/responses/" + PROBLEM_RESPONSE;
-
     public static final String PROBLEM_SCHEMA = "Problem";
 
     public static final String PROBLEM_SCHEMA_REF = "#/components/schemas/" + PROBLEM_SCHEMA;

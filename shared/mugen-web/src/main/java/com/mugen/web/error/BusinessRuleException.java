@@ -11,13 +11,11 @@ import org.springframework.http.HttpStatus;
  * act on that difference — a 422 message is worth showing to the user, a 400
  * usually indicates a client bug.
  */
+@ApiError(code = ErrorCode.BUSINESS_RULE_VIOLATION, status = HttpStatus.UNPROCESSABLE_ENTITY,
+        description = "The request is well-formed, but a domain rule forbids it right now.")
 public class BusinessRuleException extends AppException {
 
-    public BusinessRuleException(ErrorCode errorCode, String message) {
-        super(errorCode, HttpStatus.UNPROCESSABLE_ENTITY, message);
-    }
-
     public BusinessRuleException(String message) {
-        super(ErrorCode.BUSINESS_RULE_VIOLATION, HttpStatus.UNPROCESSABLE_ENTITY, message);
+        super(message);
     }
 }

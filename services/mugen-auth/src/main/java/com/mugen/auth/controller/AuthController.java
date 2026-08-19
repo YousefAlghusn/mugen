@@ -1,13 +1,13 @@
 package com.mugen.auth.controller;
 
-import com.mugen.auth.config.OpenApiConfig;
+import com.mugen.auth.config.AuthApiDocs;
 import com.mugen.auth.dto.AuthResponse;
 import com.mugen.auth.dto.LoginRequest;
 import com.mugen.auth.dto.RegisterRequest;
 import com.mugen.auth.dto.TokenPair;
 import com.mugen.auth.exception.AuthExceptions;
 import com.mugen.auth.service.AuthService;
-import com.mugen.web.openapi.MugenApiDocs;
+import com.mugen.web.openapi.Throws;
 import com.mugen.web.security.PublicEndpoint;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -54,10 +54,7 @@ public class AuthController {
      * @return the access token; the refresh token is set as a cookie
      */
     @ApiResponse(responseCode = "201", description = "Account created")
-    @ApiResponse(responseCode = "400", description = "Validation failed — `errors[]` names the fields",
-            ref = MugenApiDocs.PROBLEM_REF)
-    @ApiResponse(responseCode = "409", description = "Email or username already taken",
-            ref = MugenApiDocs.PROBLEM_REF)
+    @Throws({AuthExceptions.EmailAlreadyRegistered.class, AuthExceptions.UsernameTaken.class})
     @PublicEndpoint
     @PostMapping("/register")
     public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request,
@@ -80,8 +77,7 @@ public class AuthController {
      * @return the access token; the refresh token is set as a cookie
      */
     @ApiResponse(responseCode = "200", description = "Signed in")
-    @ApiResponse(responseCode = "401", description = "Wrong credentials, or the account is disabled",
-            ref = MugenApiDocs.PROBLEM_REF)
+    @Throws({AuthExceptions.InvalidCredentials.class, AuthExceptions.AccountDisabled.class})
     @PublicEndpoint
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request,
@@ -108,9 +104,9 @@ public class AuthController {
      * @return a fresh access token; the rotated refresh token is set as a cookie
      */
     @ApiResponse(responseCode = "200", description = "New token pair")
-    @ApiResponse(responseCode = "401", description = "Cookie absent, expired, invalid, or replayed after rotation",
-            ref = MugenApiDocs.PROBLEM_REF)
-    @SecurityRequirement(name = OpenApiConfig.REFRESH_COOKIE_SCHEME)
+    @Throws({AuthExceptions.TokenInvalid.class, AuthExceptions.SessionNotFound.class,
+            AuthExceptions.SessionReplayDetected.class})
+    @SecurityRequirement(name = AuthApiDocs.REFRESH_COOKIE_SCHEME)
     @PublicEndpoint
     @PostMapping("/refresh")
     public ResponseEntity<AuthResponse> refresh(
@@ -142,7 +138,7 @@ public class AuthController {
      */
     @ApiResponse(responseCode = "204", description = "Session ended and cookie cleared — also the answer "
             + "when no cookie was sent")
-    @SecurityRequirement(name = OpenApiConfig.REFRESH_COOKIE_SCHEME)
+    @SecurityRequirement(name = AuthApiDocs.REFRESH_COOKIE_SCHEME)
     @PublicEndpoint
     @PostMapping("/logout")
     public ResponseEntity<Void> logout(

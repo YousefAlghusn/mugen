@@ -9,6 +9,12 @@ public enum ErrorCode {
     // Generic
     RESOURCE_NOT_FOUND,
     VALIDATION_FAILED,
+    // Distinct from VALIDATION_FAILED, which promises an errors[] naming each bad
+    // field. These three carry none, so sharing its code told a client to read an
+    // array that is never there.
+    MALFORMED_REQUEST,
+    METHOD_NOT_ALLOWED,
+    UNSUPPORTED_MEDIA_TYPE,
     CONFLICT,
     BUSINESS_RULE_VIOLATION,
     FORBIDDEN,
@@ -27,6 +33,7 @@ public enum ErrorCode {
     ACCOUNT_DISABLED,
 
     // SSO (mugen-auth)
+    SSO_ACCESS_DENIED,
     SSO_PROVIDER_NOT_CONFIGURED,
     SSO_STATE_INVALID,
     SSO_EXCHANGE_FAILED,

@@ -2,13 +2,11 @@ package com.mugen.web.security;
 
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 import org.springframework.security.web.util.matcher.OrRequestMatcher;
 import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.web.bind.annotation.RequestMethod;
-import org.springframework.web.method.HandlerMethod;
 import org.springframework.web.servlet.mvc.condition.PathPatternsRequestCondition;
 import org.springframework.web.servlet.mvc.method.RequestMappingInfo;
 import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
@@ -75,18 +73,13 @@ public final class PublicEndpointMatcher implements RequestMatcher {
 
         for (RequestMappingHandlerMapping handlerMapping : handlerMappings) {
             handlerMapping.getHandlerMethods().forEach((mapping, handler) -> {
-                if (isPublic(handler)) {
+                if (PublicEndpoints.isPublic(handler)) {
                     matchers.addAll(matchersFor(mapping));
                 }
             });
         }
 
         return matchers;
-    }
-
-    private static boolean isPublic(HandlerMethod handler) {
-        return AnnotatedElementUtils.hasAnnotation(handler.getMethod(), PublicEndpoint.class)
-                || AnnotatedElementUtils.hasAnnotation(handler.getBeanType(), PublicEndpoint.class);
     }
 
     private static List<RequestMatcher> matchersFor(RequestMappingInfo mapping) {

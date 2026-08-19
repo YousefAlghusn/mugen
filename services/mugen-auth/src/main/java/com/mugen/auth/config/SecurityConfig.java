@@ -1,5 +1,7 @@
 package com.mugen.auth.config;
 
+import com.mugen.web.security.ProblemAccessDeniedHandler;
+import com.mugen.web.security.ProblemAuthenticationEntryPoint;
 import com.mugen.web.security.PublicEndpoint;
 import com.mugen.web.security.PublicEndpointMatcher;
 import org.springframework.context.annotation.Bean;
@@ -40,7 +42,9 @@ public class SecurityConfig {
     @Bean
     SecurityFilterChain filterChain(HttpSecurity http,
                                     JwtAuthenticationConverter jwtAuthenticationConverter,
-                                    PublicEndpointMatcher publicEndpointMatcher) throws Exception {
+                                    PublicEndpointMatcher publicEndpointMatcher,
+                                    ProblemAuthenticationEntryPoint problemAuthenticationEntryPoint,
+                                    ProblemAccessDeniedHandler problemAccessDeniedHandler) throws Exception {
 
         return http
                 // The token is the whole state; a JSESSIONID would be a second,
@@ -67,7 +71,16 @@ public class SecurityConfig {
 
                 // Standard resource server over the tokens this service itself issued.
                 .oauth2ResourceServer(oauth2 -> oauth2
-                        .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter)))
+                        .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter))
+                        // A bad token is refused here...
+                        .authenticationEntryPoint(problemAuthenticationEntryPoint)
+                        .accessDeniedHandler(problemAccessDeniedHandler))
+
+                // ...and no token at all never reaches the resource server's filter, so
+                // both have to be set or the commonest 401 of the two answers empty.
+                .exceptionHandling(exceptions -> exceptions
+                        .authenticationEntryPoint(problemAuthenticationEntryPoint)
+                        .accessDeniedHandler(problemAccessDeniedHandler))
 
                 // Stateless API: answer 401/403 as JSON, never redirect to a login page.
                 .formLogin(form -> form.disable())

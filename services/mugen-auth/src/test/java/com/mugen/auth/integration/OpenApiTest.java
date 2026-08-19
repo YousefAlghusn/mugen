@@ -2,13 +2,15 @@ package com.mugen.auth.integration;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mugen.auth.exception.AuthExceptions;
 import com.mugen.test.IntegrationTest;
 import com.mugen.shared.error.ErrorCode;
-import com.mugen.web.security.PublicEndpoint;
+import com.mugen.web.error.ApiErrors;
+import com.mugen.web.security.PublicEndpoints;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.core.annotation.AnnotatedElementUtils;
+import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.context.WebApplicationContext;
 import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
@@ -21,6 +23,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -180,17 +183,15 @@ class OpenApiTest {
      * Across <em>all</em> handler mappings, not one: actuator contributes a second
      * {@code RequestMappingHandlerMapping}, so asking for the bean by type throws.
      * {@link com.mugen.web.security.PublicEndpointMatcher} iterates them for the same
-     * reason, and this mirrors it deliberately.
+     * reason. The visibility check itself is {@link com.mugen.web.security.PublicEndpoints},
+     * the same one the filter chain and the document read, not a copy of it.
      */
     private Set<String> publicOperationIds() {
         Set<String> ids = new HashSet<>();
 
         context.getBeansOfType(RequestMappingHandlerMapping.class).values().forEach(handlerMapping ->
                 handlerMapping.getHandlerMethods().forEach((mapping, handler) -> {
-                    boolean isPublic =
-                            AnnotatedElementUtils.hasAnnotation(handler.getMethod(), PublicEndpoint.class)
-                                    || AnnotatedElementUtils.hasAnnotation(handler.getBeanType(), PublicEndpoint.class);
-                    if (!isPublic || mapping.getPathPatternsCondition() == null) {
+                    if (!PublicEndpoints.isPublic(handler) || mapping.getPathPatternsCondition() == null) {
                         return;
                     }
                     mapping.getPathPatternsCondition().getPatterns().forEach(pattern ->
@@ -253,22 +254,99 @@ class OpenApiTest {
     }
 
     /**
-     * The shared problem shape is registered once and referenced, rather than repeated
-     * per operation. {@code code} is enumerated from {@link ErrorCode}, so a new code
+     * The shared problem shape is registered once and referenced from inside each error
+     * response. {@code code} is enumerated from {@link ErrorCode}, so a new code
      * documents itself.
      */
     @Test
-    @DisplayName("failures reference one reusable RFC 9457 response")
-    void declaresTheSharedProblemResponse() throws Exception {
+    @DisplayName("failures reference one reusable RFC 9457 schema")
+    void declaresTheSharedProblemSchema() throws Exception {
         JsonNode document = document();
-
-        assertThat(document.at("/components/responses/Problem/content").has("application/problem+json")).isTrue();
 
         JsonNode problem = document.at("/components/schemas/Problem/properties");
         assertThat(problem.has("traceId")).isTrue();
         assertThat(problem.at("/code/enum").toString()).contains(ErrorCode.EMAIL_ALREADY_REGISTERED.name());
 
-        assertThat(document.at("/paths/~1api~1v1~1auth~1register/post/responses/409/$ref").asText())
-                .isEqualTo("#/components/responses/Problem");
+        assertThat(document.at("/paths/~1api~1v1~1auth~1register/post/responses/409"
+                + "/content/application~1problem+json/schema/$ref").asText())
+                .isEqualTo("#/components/schemas/Problem");
+    }
+
+    /**
+     * The point of {@code @Throws}: the explanation a caller reads is the one written on
+     * the exception, so it cannot drift per endpoint. Compared against the exception's own
+     * declaration rather than a copied string, so rewording it does not fail the build —
+     * only unwiring it does.
+     */
+    @Test
+    @DisplayName("an endpoint's failures are explained by their exception's declaration")
+    void throwsDeclarationsReachTheDocument() throws Exception {
+        String conflict = document()
+                .at("/paths/~1api~1v1~1auth~1register/post/responses/409/description").asText();
+
+        assertThat(conflict)
+                .contains(ErrorCode.EMAIL_ALREADY_REGISTERED.name())
+                .contains(ApiErrors.of(AuthExceptions.EmailAlreadyRegistered.class).description())
+                .contains(ApiErrors.of(AuthExceptions.UsernameTaken.class).description());
+    }
+
+    /**
+     * The half a generated document cannot check itself: that the 401 it publishes on
+     * every secured operation is the 401 the filter chain sends. Spring Security's
+     * default entry point answers empty, which left the document promising a {@code code}
+     * and a {@code traceId} that never arrived — and no log line behind either.
+     */
+    @Test
+    @DisplayName("a request with no token is refused with the problem document the operation advertises")
+    void refusalCarriesTheDocumentedProblemBody() throws Exception {
+        mockMvc.perform(get("/api/v1/auth/me"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.code").value(ErrorCode.TOKEN_INVALID.name()))
+                .andExpect(jsonPath("$.traceId").isNotEmpty());
+
+        String documented = document()
+                .at("/paths/~1api~1v1~1auth~1me/get/responses/401/description").asText();
+
+        assertThat(documented).contains(ErrorCode.TOKEN_INVALID.name());
+    }
+
+    /**
+     * Swagger UI renders the schema's placeholders — {@code "code": "string"} — unless an
+     * example says otherwise, which is the one thing a reader wants to copy. Derived from
+     * the same declaration as the description, so it cannot describe a different failure.
+     */
+    @Test
+    @DisplayName("each documented code carries a worked example body")
+    void everyCodeShowsTheBodyItProduces() throws Exception {
+        JsonNode example = document().at("/paths/~1api~1v1~1auth~1register/post/responses/409"
+                + "/content/application~1problem+json/examples/"
+                + ErrorCode.EMAIL_ALREADY_REGISTERED.name() + "/value");
+
+        assertThat(example.get("code").asText()).isEqualTo(ErrorCode.EMAIL_ALREADY_REGISTERED.name());
+        assertThat(example.get("status").asInt()).isEqualTo(409);
+        assertThat(example.get("type").asText())
+                .isEqualTo(ApiErrors.typeUri(ErrorCode.EMAIL_ALREADY_REGISTERED).toString());
+        assertThat(example.get("traceId").asText()).isNotBlank();
+    }
+
+    /**
+     * The failure this whole design replaced: a response declared as a bare {@code $ref}
+     * silently loses its description, because OpenAPI drops a reference's siblings. Every
+     * error the document names must say what it means, whatever endpoint added it.
+     */
+    @Test
+    @DisplayName("no documented failure is left unexplained")
+    void everyErrorResponseIsDescribed() throws Exception {
+        JsonNode paths = document().at("/paths");
+
+        paths.fields().forEachRemaining(path -> path.getValue().fields().forEachRemaining(operation ->
+                operation.getValue().at("/responses").fields().forEachRemaining(response -> {
+                    if (response.getKey().charAt(0) >= '4') {
+                        assertThat(response.getValue().at("/description").asText())
+                                .describedAs("%s %s → %s", operation.getKey(), path.getKey(), response.getKey())
+                                .isNotBlank();
+                    }
+                })));
     }
 }

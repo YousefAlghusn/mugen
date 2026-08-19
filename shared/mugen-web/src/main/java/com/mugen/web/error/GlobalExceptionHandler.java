@@ -3,6 +3,7 @@ package com.mugen.web.error;
 import com.mugen.shared.error.ErrorCode;
 import com.mugen.shared.trace.TraceIdHolder;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.MethodParameter;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpHeaders;
@@ -14,9 +15,9 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
-import java.net.URI;
 import java.util.List;
 
 /**
@@ -31,9 +32,6 @@ import java.util.List;
 // ProblemDetail — no traceId, no code, no errors[].
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
-
-    /** Namespace for the {@code type} URI. Stable, dereferenceable documentation ids. */
-    private static final String ERROR_TYPE_BASE = "https://mugen.dev/errors/";
 
     /** One validation failure. Serialised into the {@code errors} array. */
     public record ValidationError(String field, String message) {
@@ -93,6 +91,38 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     }
 
     /**
+     * The same failure arriving by the other route: constraints on a path variable or
+     * request parameter rather than on a body. Spring answers those with a bare 400 and
+     * no {@code errors[]}, so a caller could not tell which parameter was wrong and the
+     * two halves of validation reported differently.
+     */
+    @Override
+    protected ResponseEntity<Object> handleHandlerMethodValidationException(HandlerMethodValidationException ex,
+                                                                            HttpHeaders headers,
+                                                                            HttpStatusCode status,
+                                                                            WebRequest request) {
+        List<ValidationError> errors = ex.getParameterValidationResults().stream()
+                .flatMap(result -> result.getResolvableErrors().stream()
+                        .map(error -> new ValidationError(nameOf(result.getMethodParameter()),
+                                error.getDefaultMessage())))
+                .toList();
+
+        log.warn("Request validation failed parameters={}", errors.stream().map(ValidationError::field).toList());
+
+        ProblemDetail body = problem(HttpStatus.BAD_REQUEST, ErrorCode.VALIDATION_FAILED,
+                "Request validation failed.");
+        body.setProperty("errors", errors);
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
+    }
+
+    /** Null unless the build keeps parameter names; {@code -parameters} is on by default under Boot. */
+    private static String nameOf(MethodParameter parameter) {
+        String name = parameter.getParameterName();
+        return name != null ? name : "arg" + parameter.getParameterIndex();
+    }
+
+    /**
      * The one funnel for everything Spring MVC handles itself — 405, 415, a malformed
      * body, no handler found. Without this they answered with a {@code traceId} that
      * appeared in no log line at all.
@@ -135,7 +165,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     private ProblemDetail problem(HttpStatus status, ErrorCode code, String detail) {
         ProblemDetail body = ProblemDetail.forStatusAndDetail(status, detail);
-        body.setType(URI.create(ERROR_TYPE_BASE + code.name().toLowerCase().replace('_', '-')));
+        body.setType(ApiErrors.typeUri(code));
         body.setTitle(status.getReasonPhrase());
         body.setProperty("code", code.name());
         // Always present — the only handle a user can give support to find the log line.
@@ -143,12 +173,20 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return body;
     }
 
+    /**
+     * Never {@code VALIDATION_FAILED} — that code's published contract is an
+     * {@code errors[]} naming each rejected field, and none of these carry one. A
+     * client branching on {@code code} was being told to read an array that is
+     * never there.
+     */
     private static String codeFor(HttpStatusCode status) {
-        if (status.value() == HttpStatus.NOT_FOUND.value()) {
-            return ErrorCode.RESOURCE_NOT_FOUND.name();
-        }
-        return status.is4xxClientError()
-                ? ErrorCode.VALIDATION_FAILED.name()
-                : ErrorCode.INTERNAL_ERROR.name();
+        return switch (status.value()) {
+            case 404 -> ErrorCode.RESOURCE_NOT_FOUND.name();
+            case 405 -> ErrorCode.METHOD_NOT_ALLOWED.name();
+            case 415 -> ErrorCode.UNSUPPORTED_MEDIA_TYPE.name();
+            default -> status.is4xxClientError()
+                    ? ErrorCode.MALFORMED_REQUEST.name()
+                    : ErrorCode.INTERNAL_ERROR.name();
+        };
     }
 }

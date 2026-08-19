@@ -126,6 +126,19 @@
                 <plugin>
                     <groupId>org.springframework.boot</groupId>
                     <artifactId>spring-boot-maven-plugin</artifactId>
+                    <executions>
+                        <!--
+                            Writes META-INF/build-info.properties, which Boot exposes as
+                            BuildProperties. The OpenAPI document reads its version from
+                            there, so no service maintains a version literal that goes
+                            stale silently. Managed here so all eleven inherit it.
+                        -->
+                        <execution>
+                            <goals>
+                                <goal>build-info</goal>
+                            </goals>
+                        </execution>
+                    </executions>
                 </plugin>
             </plugins>
         </pluginManagement>

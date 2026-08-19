@@ -185,7 +185,9 @@ class SsoControllerTest {
                         .param("state", "state-value")
                         .cookie(new jakarta.servlet.http.Cookie(SsoStateCookies.NAME, "nonce")))
                 .andExpect(status().isFound())
-                .andExpect(header().string("Location", FRONTEND + "?error=sso_denied"));
+                // An ErrorCode name like every other value of this parameter, so a
+                // client switches on one vocabulary rather than two.
+                .andExpect(header().string("Location", FRONTEND + "?error=SSO_ACCESS_DENIED"));
     }
 
     @Test

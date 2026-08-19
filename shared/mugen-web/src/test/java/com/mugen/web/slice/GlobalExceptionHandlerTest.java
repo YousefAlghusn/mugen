@@ -6,6 +6,7 @@ import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import com.mugen.shared.error.ErrorCode;
 import com.mugen.shared.trace.TraceIdHolder;
+import com.mugen.web.error.ApiError;
 import com.mugen.web.error.AppException;
 import com.mugen.web.error.ConflictException;
 import com.mugen.web.error.GlobalExceptionHandler;
@@ -22,6 +23,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -89,6 +91,47 @@ class GlobalExceptionHandlerTest {
                 .andExpect(jsonPath("$.code").value(ErrorCode.VALIDATION_FAILED.name()))
                 .andExpect(jsonPath("$.errors").isArray())
                 .andExpect(jsonPath("$.errors.length()").value(2))
+                .andExpect(jsonPath("$.traceId").isNotEmpty());
+    }
+
+    /**
+     * These three used to answer {@code VALIDATION_FAILED}, whose documented contract
+     * is an {@code errors[]} naming each rejected field — which none of them carry. A
+     * code exists to be branched on, so three unrelated failures cannot share one.
+     */
+    @Test
+    @DisplayName("the 4xx Spring handles itself each carry their own code")
+    void framework4xxAreNotAllValidationFailures() throws Exception {
+        mockMvc.perform(post("/test/validate")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{ this is not json"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(ErrorCode.MALFORMED_REQUEST.name()))
+                .andExpect(jsonPath("$.errors").doesNotExist());
+
+        mockMvc.perform(get("/test/validate"))
+                .andExpect(status().isMethodNotAllowed())
+                .andExpect(jsonPath("$.code").value(ErrorCode.METHOD_NOT_ALLOWED.name()));
+
+        mockMvc.perform(post("/test/validate")
+                        .contentType(MediaType.TEXT_PLAIN)
+                        .content("nope"))
+                .andExpect(status().isUnsupportedMediaType())
+                .andExpect(jsonPath("$.code").value(ErrorCode.UNSUPPORTED_MEDIA_TYPE.name()));
+    }
+
+    /**
+     * The other route into validation: constraints on a parameter rather than a body.
+     * Nothing claimed {@code ConstraintViolationException}, so it fell through to the
+     * catch-all and answered 500 — the caller's own bad input reported as our bug.
+     */
+    @Test
+    @DisplayName("a constrained parameter fails the same way a constrained body does")
+    void validatesParametersTheSameWayAsBodies() throws Exception {
+        mockMvc.perform(get("/test/search").param("q", ""))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(ErrorCode.VALIDATION_FAILED.name()))
+                .andExpect(jsonPath("$.errors[0].field").value("q"))
                 .andExpect(jsonPath("$.traceId").isNotEmpty());
     }
 
@@ -193,19 +236,26 @@ class GlobalExceptionHandlerTest {
     record RegisterRequest(@Email @NotBlank String email, @NotBlank String username) {
     }
 
+    /** Stands in for a service's own typed failure: the code is declared, not passed in. */
+    @ApiError(code = ErrorCode.EMAIL_ALREADY_REGISTERED, description = "That address already has an account.")
+    static class EmailAlreadyRegistered extends ConflictException {
+        EmailAlreadyRegistered(String message) {
+            super(message);
+        }
+    }
+
     @RestController
     static class TestController {
 
         @org.springframework.web.bind.annotation.GetMapping("/test/conflict")
         void conflict() {
-            throw new ConflictException(ErrorCode.EMAIL_ALREADY_REGISTERED, "Email taken.");
+            throw new EmailAlreadyRegistered("Email taken.");
         }
 
         /** Message shaped like the real one: the caller's own address formatted in. */
         @org.springframework.web.bind.annotation.GetMapping("/test/conflict-with-email")
         void conflictWithEmail() {
-            throw new ConflictException(ErrorCode.EMAIL_ALREADY_REGISTERED,
-                    "Email someone@example.com is already registered.");
+            throw new EmailAlreadyRegistered("Email someone@example.com is already registered.");
         }
 
         @org.springframework.web.bind.annotation.GetMapping("/test/boom")
@@ -216,6 +266,11 @@ class GlobalExceptionHandlerTest {
         @PostMapping("/test/validate")
         void validate(@Valid @RequestBody RegisterRequest request) {
             // Never reached — validation rejects the payload first.
+        }
+
+        /** A constraint on a parameter rather than a body — the other validation route. */
+        @org.springframework.web.bind.annotation.GetMapping("/test/search")
+        void search(@RequestParam @NotBlank String q) {
         }
     }
 }

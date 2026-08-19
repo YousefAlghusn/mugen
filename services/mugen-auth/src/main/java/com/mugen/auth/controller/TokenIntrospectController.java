@@ -1,8 +1,9 @@
 package com.mugen.auth.controller;
 
 import com.mugen.auth.dto.MeResponse;
+import com.mugen.auth.exception.AuthExceptions;
 import com.mugen.auth.service.RevocationCacheService;
-import io.swagger.v3.oas.annotations.media.Content;
+import com.mugen.web.openapi.Throws;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -52,20 +53,22 @@ public class TokenIntrospectController {
      *
      * <p>Intended for a client deciding whether to bother refreshing. It is not a
      * substitute for the gateway's own check: nothing stops a caller skipping it.
+     *
+     * <p>A client that only wants a yes/no can branch on the status alone and never
+     * read the body. The 401 still carries one, because a service with a single
+     * endpoint answering 401 differently from every other is the kind of exception
+     * that has to be remembered.
      */
     @ApiResponse(responseCode = "200", description = "Token is valid and its session has not been revoked. "
             + "Empty body.")
-    @ApiResponse(responseCode = "401", description = """
-            Token is unusable — either it failed verification, or its session has been revoked. \
-            **Empty body, not a problem document**: this endpoint answers with a status code only, \
-            so a client can branch on it without parsing anything.""",
-            content = @Content)
+    @Throws(AuthExceptions.TokenRevoked.class)
     @GetMapping("/validate")
     public ResponseEntity<Void> validate(@AuthenticationPrincipal Jwt token) {
         UUID sessionId = CurrentUser.sessionId(token);
 
-        return revocationCache.isRevoked(sessionId)
-                ? ResponseEntity.status(401).build()
-                : ResponseEntity.ok().build();
+        if (revocationCache.isRevoked(sessionId)) {
+            throw new AuthExceptions.TokenRevoked();
+        }
+        return ResponseEntity.ok().build();
     }
 }

@@ -1,8 +1,9 @@
 package com.mugen.auth.controller;
 
 import com.mugen.auth.dto.SessionResponse;
+import com.mugen.auth.exception.AuthExceptions;
 import com.mugen.auth.service.SessionService;
-import com.mugen.web.openapi.MugenApiDocs;
+import com.mugen.web.openapi.Throws;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -63,11 +64,7 @@ public class SessionController {
      * @param sessionId from the list above; must be one of your own
      */
     @ApiResponse(responseCode = "204", description = "Revoked")
-    @ApiResponse(responseCode = "401", description = """
-            Also the answer when the session does not exist or belongs to someone else — \
-            `SESSION_NOT_FOUND`, deliberately indistinguishable from an unusable token, so this \
-            endpoint cannot be used to discover which session ids are real""",
-            ref = MugenApiDocs.PROBLEM_REF)
+    @Throws(AuthExceptions.SessionNotFound.class)
     @DeleteMapping("/{sessionId}")
     public ResponseEntity<Void> revokeOne(@AuthenticationPrincipal Jwt token,
                                           @Parameter(description = "From the list above; must be one of your own")

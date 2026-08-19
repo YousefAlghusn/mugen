@@ -28,4 +28,10 @@ public class MugenApiDocsAutoConfiguration {
     SecurityRequirementCustomizer securityRequirementCustomizer() {
         return new SecurityRequirementCustomizer();
     }
+
+    @Bean
+    @ConditionalOnMissingBean
+    ApiErrorResponsesCustomizer apiErrorResponsesCustomizer() {
+        return new ApiErrorResponsesCustomizer();
+    }
 }

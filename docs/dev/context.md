@@ -97,6 +97,44 @@ Three items, in the order they are worth doing (updated 2026-08-08):
 Google SSO closed the fourth item on 2026-08-04. GitHub was removed rather than
 finished — see "Removing GitHub SSO" below.
 
+## The error contract, and what the document was promising (2026-08-16)
+The `@ApiError`/`@Throws` derivation was already right — one declaration on the
+exception class feeds the thrown response and the document, so neither can drift. What
+it could not see was everything answered *outside* a handler, and that is where the
+document was lying.
+
+- **A refused request never reached `GlobalExceptionHandler`.** Spring Security's
+  default entry point writes a bare 401: no `code`, no `traceId`, no log line — while
+  the document promised all three and springdoc attached a `Problem` schema to it. The
+  commonest failure in the system was the one with no problem document.
+  `ProblemAuthenticationEntryPoint` and `ProblemAccessDeniedHandler` fix it by handing
+  the exception to `handlerExceptionResolver` instead of serialising a second body, so
+  the 401 comes back out of the same handler as everything else. **Both the
+  `oauth2ResourceServer` and the `exceptionHandling` hooks have to be set**: a bad token
+  is refused by the first, no token at all by the second, and wiring only one leaves the
+  more common half empty. `@Lazy` on the resolver — the filter chain is built before MVC
+  finishes, and asking eagerly closes a cycle.
+- **Every framework 4xx claimed `VALIDATION_FAILED`.** 405, 415 and a malformed body all
+  carried the one code whose published contract is an `errors[]` naming each bad field,
+  which none of them have. A code exists to be branched on, so they now have their own.
+- **Parameter validation was a 500.** In Boot 4 a constrained `@RequestParam` throws
+  `HandlerMethodValidationException`, not `ConstraintViolationException` — the older
+  advice everyone copies handles the wrong one.
+
+Two things worth keeping in mind when extending this:
+
+- **`@ApiError` cannot tell an omitted attribute from one written with its default
+  value** — reflection has no way to. `code = INTERNAL_ERROR` on a subclass silently
+  inherits the base's code. Pinned by a test rather than fixed, because it cannot be.
+- **Failures on one endpoint merge by code**, so two exception classes sharing an
+  `ErrorCode` publish only the first's explanation. `AuthExceptionsTest` fails on it;
+  every later service wants the same test.
+
+`/validate` gave up its deliberately-empty 401 in the same pass. It was the only
+endpoint in the service answering 401 differently from the rest, which is the kind of
+exception that has to be remembered — and a client wanting yes/no still branches on the
+status without reading the body.
+
 ## Removing GitHub SSO, and what replaces it (2026-08-08)
 GitHub was a second **authorization-code** provider. Same redirect, same PKCE, same
 `state`, same callback — only the user-info JSON differed. It exercised

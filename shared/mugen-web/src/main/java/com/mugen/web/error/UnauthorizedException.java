@@ -10,22 +10,15 @@ import org.springframework.http.HttpStatus;
  * "no such user": distinguishing the two turns the login endpoint into an oracle
  * for enumerating which email addresses have accounts.
  */
+@ApiError(code = ErrorCode.INVALID_CREDENTIALS, status = HttpStatus.UNAUTHORIZED,
+        description = "The credential presented was missing, wrong or no longer valid.")
 public class UnauthorizedException extends AppException {
 
-    public UnauthorizedException(ErrorCode errorCode, String message) {
-        super(errorCode, HttpStatus.UNAUTHORIZED, message);
-    }
-
     public UnauthorizedException(String message) {
-        super(ErrorCode.INVALID_CREDENTIALS, HttpStatus.UNAUTHORIZED, message);
+        super(message);
     }
 
-    /**
-     * Keeps the underlying failure for the logs while the client still sees only
-     * {@code message}. Used where the real reason is a third party's response, which
-     * must never be echoed back.
-     */
-    public UnauthorizedException(ErrorCode errorCode, String message, Throwable cause) {
-        super(errorCode, HttpStatus.UNAUTHORIZED, message, cause);
+    public UnauthorizedException(String message, Throwable cause) {
+        super(message, cause);
     }
 }
