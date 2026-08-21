@@ -20,6 +20,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.RequestBuilder;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -135,16 +136,6 @@ class GlobalExceptionHandlerTest {
                 .andExpect(jsonPath("$.traceId").isNotEmpty());
     }
 
-    @Test
-    @DisplayName("the traceId in the body is the one already in scope, not a new one")
-    void reusesActiveTraceId() throws Exception {
-        String active = "4bf92f3577b34da6a3ce929d0e0e4736";
-        TraceIdHolder.set(active);
-
-        mockMvc.perform(get("/test/conflict"))
-                .andExpect(jsonPath("$.traceId").value(active));
-    }
-
     /**
      * A traceId nothing ever logged is decoration: it is the handle a user quotes
      * to support, and it has to lead somewhere. These two paths answered with one
@@ -224,40 +215,33 @@ class GlobalExceptionHandlerTest {
     }
 
     /**
-     * The claim the traceId exists to make. It went unmet for every refused request
-     * until this: the id was minted while building the body, after the log line had
-     * already been written, so support was handed a value that appeared nowhere.
+     * The claim the traceId exists to make: it is the id the request's log lines are
+     * stamped with, so quoting it finds them. Every path has to agree — the one that
+     * did not was answered inside {@code ResponseEntityExceptionHandler}, which built
+     * its own body.
      */
     @Test
-    @DisplayName("the traceId in the body is the one in the log line, on every path")
-    void theLoggedTraceIdIsTheOneTheCallerIsGiven() throws Exception {
-        assertBodyTraceIdIsLogged(get("/test/conflict"));
-        assertBodyTraceIdIsLogged(get("/test/boom"));
-        assertBodyTraceIdIsLogged(get("/test/search").param("q", ""));
-        assertBodyTraceIdIsLogged(post("/test/validate")
+    @DisplayName("every path reports the trace the logs are stamped with, not an id of its own")
+    void reportsTheActiveTraceIdOnEveryPath() throws Exception {
+        assertReportsActiveTraceId(get("/test/conflict"));
+        assertReportsActiveTraceId(get("/test/boom"));
+        assertReportsActiveTraceId(get("/test/search").param("q", ""));
+        assertReportsActiveTraceId(post("/test/validate")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                         {"email": "not-an-email", "username": ""}
                         """));
-        // Handled entirely inside ResponseEntityExceptionHandler, which is where the
-        // id and the log line were furthest apart.
-        assertBodyTraceIdIsLogged(post("/test/validate")
+        assertReportsActiveTraceId(post("/test/validate")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{ this is not json"));
     }
 
-    private void assertBodyTraceIdIsLogged(org.springframework.test.web.servlet.RequestBuilder request) throws Exception {
-        TraceIdHolder.clear();
-        ListAppender<ILoggingEvent> logged = captureHandlerLogs();
+    /** Stands in for Micrometer Tracing having opened a scope for the request. */
+    private void assertReportsActiveTraceId(RequestBuilder request) throws Exception {
+        String active = "4bf92f3577b34da6a3ce929d0e0e4736";
+        TraceIdHolder.set(active);
 
-        String body = mockMvc.perform(request).andReturn().getResponse().getContentAsString();
-        String traceId = body.replaceAll("(?s).*\"traceId\"\\s*:\\s*\"([^\"]+)\".*", "$1");
-
-        assertThat(traceId).matches("[0-9a-f]{32}");
-        assertThat(logged.list)
-                .describedAs("a response carrying traceId %s must leave a line naming it", traceId)
-                .isNotEmpty()
-                .anyMatch(event -> event.getFormattedMessage().contains(traceId));
+        mockMvc.perform(request).andExpect(jsonPath("$.traceId").value(active));
     }
 
     private static ListAppender<ILoggingEvent> captureHandlerLogs() {

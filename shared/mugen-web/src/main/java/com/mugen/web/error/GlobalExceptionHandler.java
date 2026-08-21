@@ -46,18 +46,16 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
      */
     @ExceptionHandler(AppException.class)
     public ProblemDetail handleAppException(AppException ex, WebRequest request) {
-        String traceId = TraceIdHolder.getOrCreate();
-
         // A wrong password is the system working, so 4xx is WARN without a stack.
         if (ex.getStatus().is5xxServerError()) {
-            log.error("Request failed errorCode={} status={} path={} traceId={}",
-                    ex.getErrorCode(), ex.getStatus().value(), pathOf(request), traceId, ex);
+            log.error("Request failed errorCode={} status={} path={}",
+                    ex.getErrorCode(), ex.getStatus().value(), pathOf(request), ex);
         } else {
             // No message, on the same rule as the framework 4xx below: these are built
             // from the caller's input. EmailAlreadyRegistered names the address, which
             // is fine in the response and permanent in Loki.
-            log.warn("Request failed errorCode={} status={} path={} traceId={}",
-                    ex.getErrorCode(), ex.getStatus().value(), pathOf(request), traceId);
+            log.warn("Request failed errorCode={} status={} path={}",
+                    ex.getErrorCode(), ex.getStatus().value(), pathOf(request));
         }
         return problem(ex.getStatus(), ex.getErrorCode(), ex.getMessage());
     }
@@ -69,10 +67,13 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
      */
     @ExceptionHandler(Exception.class)
     public ProblemDetail handleUnexpected(Exception ex) {
-        String traceId = TraceIdHolder.getOrCreate();
-        log.error("Unhandled exception traceId={}", traceId, ex);
+        log.error("Unhandled exception", ex);
+
+        // Resolved once and threaded through: the detail quotes the id, so a second
+        // resolve could put a different one in the same response.
+        String traceId = TraceIdHolder.resolve();
         return problem(HttpStatus.INTERNAL_SERVER_ERROR, ErrorCode.INTERNAL_ERROR,
-                "An unexpected error occurred. Quote traceId %s when reporting it.".formatted(traceId));
+                "An unexpected error occurred. Quote traceId %s when reporting it.".formatted(traceId), traceId);
     }
 
     /** Bean-validation failures on {@code @RequestBody}, rendered field by field. */
@@ -86,8 +87,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 .toList();
 
         // Field names only — the rejected value is routinely an email or a password.
-        log.warn("Request validation failed fields={} traceId={}",
-                errors.stream().map(ValidationError::field).toList(), TraceIdHolder.getOrCreate());
+        log.warn("Request validation failed fields={}", errors.stream().map(ValidationError::field).toList());
 
         ProblemDetail body = problem(HttpStatus.BAD_REQUEST, ErrorCode.VALIDATION_FAILED,
                 "Request validation failed.");
@@ -113,8 +113,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                                 error.getDefaultMessage())))
                 .toList();
 
-        log.warn("Request validation failed parameters={} traceId={}",
-                errors.stream().map(ValidationError::field).toList(), TraceIdHolder.getOrCreate());
+        log.warn("Request validation failed parameters={}", errors.stream().map(ValidationError::field).toList());
 
         ProblemDetail body = problem(HttpStatus.BAD_REQUEST, ErrorCode.VALIDATION_FAILED,
                 "Request validation failed.");
@@ -144,14 +143,11 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                                                              HttpHeaders headers,
                                                              HttpStatusCode statusCode,
                                                              WebRequest request) {
-        String traceId = TraceIdHolder.getOrCreate();
-
         if (statusCode.is5xxServerError()) {
-            log.error("Request failed status={} path={} traceId={}",
-                    statusCode.value(), pathOf(request), traceId, ex);
+            log.error("Request failed status={} path={}", statusCode.value(), pathOf(request), ex);
         } else {
-            log.warn("Request rejected status={} reason={} path={} traceId={}",
-                    statusCode.value(), ex.getClass().getSimpleName(), pathOf(request), traceId);
+            log.warn("Request rejected status={} reason={} path={}",
+                    statusCode.value(), ex.getClass().getSimpleName(), pathOf(request));
         }
         return super.handleExceptionInternal(ex, body, headers, statusCode, request);
     }
@@ -166,7 +162,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                                                           HttpStatusCode statusCode,
                                                           WebRequest request) {
         if (body instanceof ProblemDetail problemDetail) {
-            problemDetail.setProperty("traceId", TraceIdHolder.getOrCreate());
+            problemDetail.setProperty("traceId", TraceIdHolder.resolve());
             problemDetail.setProperty("code", codeFor(statusCode));
         }
         return super.createResponseEntity(body, headers, statusCode, request);
@@ -179,12 +175,17 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     }
 
     private ProblemDetail problem(HttpStatus status, ErrorCode code, String detail) {
+        return problem(status, code, detail, TraceIdHolder.resolve());
+    }
+
+    private ProblemDetail problem(HttpStatus status, ErrorCode code, String detail, String traceId) {
         ProblemDetail body = ProblemDetail.forStatusAndDetail(status, detail);
         body.setType(ApiErrors.typeUri(code));
         body.setTitle(status.getReasonPhrase());
         body.setProperty("code", code.name());
-        // Always present — the only handle a user can give support to find the log line.
-        body.setProperty("traceId", TraceIdHolder.getOrCreate());
+        // Always present — the only handle a user can give support to find the log line,
+        // which carries the same id through the correlation field of every line.
+        body.setProperty("traceId", traceId);
         return body;
     }
 

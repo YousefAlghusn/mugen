@@ -29,16 +29,16 @@ public final class TraceIdHolder {
     }
 
     /**
-     * @return the active trace id, generating and storing a W3C-shaped fallback
-     *         only if the tracer has not already set one
+     * The trace id to report to a caller. Reads the tracer's, and mints a W3C-shaped
+     * one only when there is no span at all — without storing it, because MDC belongs
+     * to whoever opened the scope. Writing here would leave the id on a pooled thread
+     * for the next request to read as its own.
+     *
+     * @return the active trace id, or a fresh one when nothing is tracing
      */
-    public static String getOrCreate() {
+    public static String resolve() {
         String traceId = MDC.get(TRACE_ID_KEY);
-        if (traceId == null) {
-            traceId = newW3CTraceId();
-            MDC.put(TRACE_ID_KEY, traceId);
-        }
-        return traceId;
+        return traceId != null ? traceId : newW3CTraceId();
     }
 
     public static void set(String traceId) {

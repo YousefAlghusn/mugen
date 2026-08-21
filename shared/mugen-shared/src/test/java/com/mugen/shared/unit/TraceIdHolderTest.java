@@ -22,32 +22,36 @@ class TraceIdHolderTest {
     }
 
     @Test
-    @DisplayName("getOrCreate() does not overwrite an id the tracer already set")
-    void getOrCreateDefersToExistingId() {
+    @DisplayName("resolve() reports the id the tracer already set")
+    void resolveDefersToExistingId() {
         // Simulates Micrometer Tracing having populated the MDC from a
         // traceparent header. Minting a second id here would decouple the
         // log's trace id from the one Jaeger recorded.
         String fromTracer = "4bf92f3577b34da6a3ce929d0e0e4736";
         MDC.put(TraceIdHolder.TRACE_ID_KEY, fromTracer);
 
-        assertThat(TraceIdHolder.getOrCreate()).isEqualTo(fromTracer);
+        assertThat(TraceIdHolder.resolve()).isEqualTo(fromTracer);
     }
 
     @Test
-    @DisplayName("getOrCreate() fallback matches the W3C trace-id shape")
-    void getOrCreateFallbackIsW3CShaped() {
-        String generated = TraceIdHolder.getOrCreate();
-
+    @DisplayName("resolve() falls back to the W3C trace-id shape when nothing is tracing")
+    void resolveFallbackIsW3CShaped() {
         // 32 lower-case hex chars, per W3C Trace Context — not a dashed UUID,
         // so consumers never have to handle two formats.
-        assertThat(generated).matches("[0-9a-f]{32}");
-        assertThat(MDC.get(TraceIdHolder.TRACE_ID_KEY)).isEqualTo(generated);
+        assertThat(TraceIdHolder.resolve()).matches("[0-9a-f]{32}");
     }
 
+    /**
+     * The reason this is a read and not a {@code getOrCreate}: request threads are
+     * pooled, so an id written here outlives its response and the next request on
+     * that thread reads someone else's trace as its own.
+     */
     @Test
-    @DisplayName("getOrCreate() is stable within a request")
-    void getOrCreateIsStableOnRepeatCalls() {
-        assertThat(TraceIdHolder.getOrCreate()).isEqualTo(TraceIdHolder.getOrCreate());
+    @DisplayName("resolve() never writes to the MDC it did not own")
+    void resolveLeavesNothingBehind() {
+        TraceIdHolder.resolve();
+
+        assertThat(MDC.get(TraceIdHolder.TRACE_ID_KEY)).isNull();
     }
 
     @Test

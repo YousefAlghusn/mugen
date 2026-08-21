@@ -240,6 +240,12 @@ management:
       probability: 1.0
 
 logging:
+  # The traceId a ProblemDetail reports, on every line of the request that produced
+  # it. Boot's default here is `traceId-spanId` padded to a fixed 49 columns, which
+  # spends half the line on blanks for everything logged outside a request; the span
+  # id is in Jaeger anyway, and the trace id is the half a caller can quote.
+  pattern:
+    correlation: "[%X{traceId:-}] "
   level:
     com.mugen.auth: DEBUG
     # Uncomment when debugging Flyway/JPA schema drift.

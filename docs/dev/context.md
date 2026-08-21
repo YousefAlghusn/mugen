@@ -155,18 +155,34 @@ Three causes, and only the first is the one anybody would guess:
   only because `spring.threads.virtual.enabled` gives a thread per request; a service
   copying this without virtual threads would have served one request's id to the next.
 
-The fix keeps the guarantee independent of the tracing dependency, because ten more
-services will copy this and one of them will forget it: `TraceIdFilter` in mugen-web
-puts an id in the MDC before anything can log, ordered at `HIGHEST_PRECEDENCE + 2` —
-inside Boot's observation filter at `+ 1` so a real trace id always wins, outside the
-security chain at `-100` so a refused request still has one. It clears only what it
-minted; an id belonging to a tracer is that tracer's to end. The handler logs
-`traceId={}` explicitly rather than relying on `logging.pattern.correlation`, which
-exists only where tracing is configured.
+**The fix is one owner, not two.** The tracer owns the MDC key — which is what
+`TraceIdHolder`'s javadoc always said — so it sets the id at request start, every log
+line carries it through `logging.pattern.correlation`, and it ends its own scope.
+`TraceIdHolder.resolve()` only reads: MDC if a span is in scope, otherwise a W3C-shaped
+id for this response alone, never written back. This is the reference repo's shape
+(`Dancan254/exception-handling`, `resolveTraceId()`), and the reason it is right is
+that a write here is a write onto a pooled thread that nothing owns the removal of.
 
-`GlobalExceptionHandlerTest.theLoggedTraceIdIsTheOneTheCallerIsGiven` is the invariant
-worth keeping: it reads the id out of the response body and requires a log line
-containing it, on all five paths. It fails on the bug rather than on a rename.
+A filter was written first and deleted the same day. It put an id in MDC before
+anything could log, so the guarantee held even with no tracer configured — but with
+the tracer working it does nothing at all, and it existed only to clean up a write
+that no longer happens. The cheaper cover for "a service forgets the tracing
+dependency" is that the log pattern goes blank, which is visible in the first line of
+output.
+
+Consequences worth knowing:
+
+- **Do not add `traceId={}` to a log message.** The correlation field already carries
+  it on every line, and CLAUDE.md's rule against explaining a fact twice applies to
+  logs the same as to comments.
+- **`logging.pattern.correlation` is set per service.** Boot's default is
+  `traceId-spanId` padded to a fixed 49 columns, so every line logged outside a
+  request spends half its width on blanks. mugen-auth prints `[%X{traceId:-}] ` — the
+  span id is in Jaeger, and the trace id is the half a caller can quote.
+- `GlobalExceptionHandlerTest.reportsTheActiveTraceIdOnEveryPath` is the invariant:
+  with an id in scope, all five paths report exactly that one. The path that did not
+  was the one answered inside `ResponseEntityExceptionHandler`, which builds its own
+  body.
 
 ## Removing GitHub SSO, and what replaces it (2026-08-08)
 GitHub was a second **authorization-code** provider. Same redirect, same PKCE, same
