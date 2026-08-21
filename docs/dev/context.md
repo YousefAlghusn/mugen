@@ -135,6 +135,39 @@ endpoint in the service answering 401 differently from the rest, which is the ki
 exception that has to be remembered — and a client wanting yes/no still branches on the
 status without reading the body.
 
+## The traceId that led nowhere (2026-08-21)
+Found while exercising Swagger: a 401 answered with
+`traceId=e7a7e6717e584b229a6bb213817e885f` and no log line in the run mentioned it.
+The 2026-08-16 pass had given refusals a problem document; what it had not given them
+was the half that makes the document useful.
+
+Three causes, and only the first is the one anybody would guess:
+
+- **Tracing was never auto-configured.** See "Boot 4 traps" — the pom had the
+  libraries, not the module. Proved rather than assumed: a request carrying
+  `traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-…` came back with an unrelated id.
+- **The id was minted after the line was written.** `handleAppException` logged, then
+  returned `problem(...)`, and `problem` is what calls `getOrCreate()`. On the
+  fallback path the value in the body did not exist yet at the moment of the log call,
+  so no log pattern could have printed it. `handleExceptionInternal` had the same
+  shape.
+- **`TraceIdHolder.clear()` had no caller**, against its own javadoc. Nothing leaked
+  only because `spring.threads.virtual.enabled` gives a thread per request; a service
+  copying this without virtual threads would have served one request's id to the next.
+
+The fix keeps the guarantee independent of the tracing dependency, because ten more
+services will copy this and one of them will forget it: `TraceIdFilter` in mugen-web
+puts an id in the MDC before anything can log, ordered at `HIGHEST_PRECEDENCE + 2` —
+inside Boot's observation filter at `+ 1` so a real trace id always wins, outside the
+security chain at `-100` so a refused request still has one. It clears only what it
+minted; an id belonging to a tracer is that tracer's to end. The handler logs
+`traceId={}` explicitly rather than relying on `logging.pattern.correlation`, which
+exists only where tracing is configured.
+
+`GlobalExceptionHandlerTest.theLoggedTraceIdIsTheOneTheCallerIsGiven` is the invariant
+worth keeping: it reads the id out of the response body and requires a log line
+containing it, on all five paths. It fails on the bug rather than on a rename.
+
 ## Removing GitHub SSO, and what replaces it (2026-08-08)
 GitHub was a second **authorization-code** provider. Same redirect, same PKCE, same
 `state`, same callback — only the user-info JSON differed. It exercised
@@ -595,6 +628,16 @@ being on the classpath no longer means its autoconfiguration is:
   all, though `RestClient` sits in spring-web. Inject the bean rather than
   `RestClient.create()`: it carries the service's Jackson config, including
   `fail-on-unknown-properties: false`.
+- `spring-boot-micrometer-tracing-opentelemetry` — the worst of the set, because
+  nothing fails. `micrometer-tracing-bridge-otel` and `opentelemetry-exporter-otlp`
+  carry the libraries only, so with those alone there is no `Tracer`: nothing writes
+  the `traceId` MDC key, an inbound `traceparent` is ignored, and Jaeger receives
+  nothing while the service looks healthy. Found 2026-08-21 by noticing a
+  ProblemDetail's `traceId` in no log line — every one ever issued was
+  `TraceIdHolder`'s local fallback. This module also carries
+  `LogCorrelationEnvironmentPostProcessor`, which is what sets
+  `logging.pattern.correlation`, so its absence is also why no log line had a
+  correlation field to begin with.
 - `spring-boot-webmvc-test` — `@WebMvcTest` moved to
   `org.springframework.boot.webmvc.test.autoconfigure`, no longer in
   `spring-boot-starter-test`.

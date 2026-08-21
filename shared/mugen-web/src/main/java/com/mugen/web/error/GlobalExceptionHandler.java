@@ -33,6 +33,9 @@ import java.util.List;
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
+    /** What {@link WebRequest#getDescription(boolean)} prefixes its path with. */
+    private static final String URI_PREFIX = "uri=";
+
     /** One validation failure. Serialised into the {@code errors} array. */
     public record ValidationError(String field, String message) {
     }
@@ -43,16 +46,18 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
      */
     @ExceptionHandler(AppException.class)
     public ProblemDetail handleAppException(AppException ex, WebRequest request) {
+        String traceId = TraceIdHolder.getOrCreate();
+
         // A wrong password is the system working, so 4xx is WARN without a stack.
         if (ex.getStatus().is5xxServerError()) {
-            log.error("Request failed errorCode={} status={} path={}",
-                    ex.getErrorCode(), ex.getStatus().value(), request.getDescription(false), ex);
+            log.error("Request failed errorCode={} status={} path={} traceId={}",
+                    ex.getErrorCode(), ex.getStatus().value(), pathOf(request), traceId, ex);
         } else {
             // No message, on the same rule as the framework 4xx below: these are built
             // from the caller's input. EmailAlreadyRegistered names the address, which
             // is fine in the response and permanent in Loki.
-            log.warn("Request failed errorCode={} status={} path={}",
-                    ex.getErrorCode(), ex.getStatus().value(), request.getDescription(false));
+            log.warn("Request failed errorCode={} status={} path={} traceId={}",
+                    ex.getErrorCode(), ex.getStatus().value(), pathOf(request), traceId);
         }
         return problem(ex.getStatus(), ex.getErrorCode(), ex.getMessage());
     }
@@ -81,7 +86,8 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 .toList();
 
         // Field names only — the rejected value is routinely an email or a password.
-        log.warn("Request validation failed fields={}", errors.stream().map(ValidationError::field).toList());
+        log.warn("Request validation failed fields={} traceId={}",
+                errors.stream().map(ValidationError::field).toList(), TraceIdHolder.getOrCreate());
 
         ProblemDetail body = problem(HttpStatus.BAD_REQUEST, ErrorCode.VALIDATION_FAILED,
                 "Request validation failed.");
@@ -107,7 +113,8 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                                 error.getDefaultMessage())))
                 .toList();
 
-        log.warn("Request validation failed parameters={}", errors.stream().map(ValidationError::field).toList());
+        log.warn("Request validation failed parameters={} traceId={}",
+                errors.stream().map(ValidationError::field).toList(), TraceIdHolder.getOrCreate());
 
         ProblemDetail body = problem(HttpStatus.BAD_REQUEST, ErrorCode.VALIDATION_FAILED,
                 "Request validation failed.");
@@ -137,12 +144,14 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                                                              HttpHeaders headers,
                                                              HttpStatusCode statusCode,
                                                              WebRequest request) {
+        String traceId = TraceIdHolder.getOrCreate();
+
         if (statusCode.is5xxServerError()) {
-            log.error("Request failed status={} path={}",
-                    statusCode.value(), request.getDescription(false), ex);
+            log.error("Request failed status={} path={} traceId={}",
+                    statusCode.value(), pathOf(request), traceId, ex);
         } else {
-            log.warn("Request rejected status={} reason={} path={}",
-                    statusCode.value(), ex.getClass().getSimpleName(), request.getDescription(false));
+            log.warn("Request rejected status={} reason={} path={} traceId={}",
+                    statusCode.value(), ex.getClass().getSimpleName(), pathOf(request), traceId);
         }
         return super.handleExceptionInternal(ex, body, headers, statusCode, request);
     }
@@ -161,6 +170,12 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
             problemDetail.setProperty("code", codeFor(statusCode));
         }
         return super.createResponseEntity(body, headers, statusCode, request);
+    }
+
+    /** {@code getDescription} already returns {@code uri=/path}, which made the log read {@code path=uri=/path}. */
+    private static String pathOf(WebRequest request) {
+        String description = request.getDescription(false);
+        return description.startsWith(URI_PREFIX) ? description.substring(URI_PREFIX.length()) : description;
     }
 
     private ProblemDetail problem(HttpStatus status, ErrorCode code, String detail) {

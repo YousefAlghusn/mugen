@@ -223,6 +223,43 @@ class GlobalExceptionHandlerTest {
                 .doesNotContain("someone@example.com");
     }
 
+    /**
+     * The claim the traceId exists to make. It went unmet for every refused request
+     * until this: the id was minted while building the body, after the log line had
+     * already been written, so support was handed a value that appeared nowhere.
+     */
+    @Test
+    @DisplayName("the traceId in the body is the one in the log line, on every path")
+    void theLoggedTraceIdIsTheOneTheCallerIsGiven() throws Exception {
+        assertBodyTraceIdIsLogged(get("/test/conflict"));
+        assertBodyTraceIdIsLogged(get("/test/boom"));
+        assertBodyTraceIdIsLogged(get("/test/search").param("q", ""));
+        assertBodyTraceIdIsLogged(post("/test/validate")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"email": "not-an-email", "username": ""}
+                        """));
+        // Handled entirely inside ResponseEntityExceptionHandler, which is where the
+        // id and the log line were furthest apart.
+        assertBodyTraceIdIsLogged(post("/test/validate")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{ this is not json"));
+    }
+
+    private void assertBodyTraceIdIsLogged(org.springframework.test.web.servlet.RequestBuilder request) throws Exception {
+        TraceIdHolder.clear();
+        ListAppender<ILoggingEvent> logged = captureHandlerLogs();
+
+        String body = mockMvc.perform(request).andReturn().getResponse().getContentAsString();
+        String traceId = body.replaceAll("(?s).*\"traceId\"\\s*:\\s*\"([^\"]+)\".*", "$1");
+
+        assertThat(traceId).matches("[0-9a-f]{32}");
+        assertThat(logged.list)
+                .describedAs("a response carrying traceId %s must leave a line naming it", traceId)
+                .isNotEmpty()
+                .anyMatch(event -> event.getFormattedMessage().contains(traceId));
+    }
+
     private static ListAppender<ILoggingEvent> captureHandlerLogs() {
         Logger logger = (Logger) LoggerFactory.getLogger(GlobalExceptionHandler.class);
         ListAppender<ILoggingEvent> appender = new ListAppender<>();

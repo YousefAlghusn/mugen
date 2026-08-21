@@ -174,13 +174,23 @@
             <groupId>io.micrometer</groupId>
             <artifactId>micrometer-registry-prometheus</artifactId>
         </dependency>
-        <!-- Bridges Micrometer's Observation API onto OpenTelemetry, and exports
-             OTLP to Jaeger. This is also what populates the traceId MDC key that
-             TraceIdHolder and the ProblemDetail handler read. -->
+        <!-- Tracing needs its auto-configuration as well as its libraries, and Boot 4
+             ships them as separate artifacts — the same split that moved
+             KafkaAutoConfiguration into spring-boot-kafka. Without this there is no
+             Tracer at all: nothing writes the traceId MDC key, an inbound traceparent
+             is ignored, and Jaeger receives nothing. Brings
+             spring-boot-micrometer-tracing and spring-boot-opentelemetry with it. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-micrometer-tracing-opentelemetry</artifactId>
+        </dependency>
+        <!-- Bridges Micrometer's Observation API onto OpenTelemetry, and is what
+             populates the traceId MDC key TraceIdHolder reads. -->
         <dependency>
             <groupId>io.micrometer</groupId>
             <artifactId>micrometer-tracing-bridge-otel</artifactId>
         </dependency>
+        <!-- Exports the spans over OTLP to Jaeger. -->
         <dependency>
             <groupId>io.opentelemetry</groupId>
             <artifactId>opentelemetry-exporter-otlp</artifactId>
