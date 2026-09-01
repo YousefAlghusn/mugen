@@ -58,7 +58,7 @@ public class SessionService {
             throw new AuthExceptions.SessionNotFound();
         }
 
-        if (presentedVersion != session.getTokenVersion()) {
+        if (session.isReplayOf(presentedVersion)) {
             log.warn("Refresh token replay detected, revoking session sessionId={} userId={} "
                             + "presentedVersion={} currentVersion={}",
                     sessionId, session.getUser().getId(), presentedVersion, session.getTokenVersion());

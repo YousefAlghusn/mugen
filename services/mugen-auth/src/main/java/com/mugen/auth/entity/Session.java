@@ -82,8 +82,9 @@ public class Session extends BaseEntity {
     }
 
     /**
-     * @return true when {@code presentedVersion} belongs to an already-rotated
-     *         token, meaning the refresh token was captured and replayed
+     * @return true when {@code presentedVersion} is not the session's current one:
+     *         an older, already-rotated token (a captured refresh token, replayed),
+     *         or a version never issued at all
      * <p>
      * The correct response is to revoke the whole session, not merely to reject
      * this request. Once a refresh token has leaked there is no way to tell the
@@ -91,7 +92,7 @@ public class Session extends BaseEntity {
      * hold the newer token — rejecting one call would leave them logged in.
      */
     public boolean isReplayOf(int presentedVersion) {
-        return presentedVersion < tokenVersion;
+        return presentedVersion != tokenVersion;
     }
 
     public void revoke() {
