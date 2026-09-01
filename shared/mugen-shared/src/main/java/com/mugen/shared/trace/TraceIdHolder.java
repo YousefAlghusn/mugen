@@ -9,7 +9,7 @@ import java.util.UUID;
  * <p>
  * <strong>Micrometer Tracing owns the {@value #TRACE_ID_KEY} MDC key</strong> and
  * populates it from the inbound {@code traceparent}. This class only reads it — minting
- * ids in competition would make a log line disagree with Jaeger. {@link #getOrCreate()}
+ * ids in competition would make a log line disagree with Jaeger. {@link #resolve()}
  * covers the one edge where no span is active, and its fallback matches the W3C shape
  * so nothing downstream sees two formats.
  */
