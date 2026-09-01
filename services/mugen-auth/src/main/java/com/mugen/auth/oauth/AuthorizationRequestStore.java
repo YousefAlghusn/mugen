@@ -4,6 +4,8 @@ import com.mugen.auth.config.SsoProperties;
 import com.mugen.auth.entity.OAuthProvider;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.RedisOperations;
+import org.springframework.data.redis.core.SessionCallback;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
@@ -41,8 +43,19 @@ public class AuthorizationRequestStore {
         fields.put(FIELD_BROWSER_NONCE, pending.browserNonce());
 
         String key = key(state);
-        redis.opsForHash().putAll(key, fields);
-        redis.expire(key, ssoProperties.stateTtl());
+        // MULTI/EXEC so the hash and its TTL commit as one: a failure between a bare
+        // HSET and EXPIRE would leave a state entry that never expires, and a state
+        // that outlives its window is a callback that can be forged against for longer.
+        redis.execute(new SessionCallback<Object>() {
+            @Override
+            @SuppressWarnings({"unchecked", "rawtypes"})
+            public Object execute(RedisOperations operations) {
+                operations.multi();
+                operations.opsForHash().putAll(key, fields);
+                operations.expire(key, ssoProperties.stateTtl());
+                return operations.exec();
+            }
+        });
     }
 
     /**
