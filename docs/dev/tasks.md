@@ -324,8 +324,18 @@ services get built from, so anything wrong here gets copied ten times.
   generated document live. Two things only the real run found: javadoc's hanging indent
   reaching the document as would-be Markdown code blocks, and there being two
   `RequestMappingHandlerMapping` beans rather than one.
+- **Correctness review 2026-09-01**, a multi-agent pass over the whole branch before the
+  merge to main. Five findings, all fixed and each pinned by a test where one could see
+  it: the register password bounded by UTF-8 bytes rather than characters (BCrypt's real
+  72-byte limit, so an oversized multi-byte password is a 400 and not a 500 or a silent
+  truncation); a 500 now logs the same traceId it returns, which with no active span it
+  did not; one predicate — `Session.isReplayOf` — now decides refresh-token replay
+  instead of a `!=` inlined beside it; the SSO `state` hash and its TTL written in one
+  MULTI/EXEC so a crash between them cannot leave a state that never expires; and a stale
+  `TraceIdHolder` javadoc link. `./mvnw verify` green.
 - **Still open on this item:** library choices, layering and the deploy story have not
-  been reviewed — this pass covered comments, endpoint visibility and API docs only.
+  been reviewed — the pass above covered correctness and the error/security contract, the
+  earlier one comments, endpoint visibility and API docs.
 - [ ] mugen-auth `Dockerfile` + `.dockerignore`, following `eureka-server/` as the
       template (layered jar, non-root, MaxRAMPercentage). Every service owes one
       and this is the first.
