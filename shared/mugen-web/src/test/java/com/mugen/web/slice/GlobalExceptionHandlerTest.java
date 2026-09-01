@@ -4,6 +4,7 @@ import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
+import com.jayway.jsonpath.JsonPath;
 import com.mugen.shared.error.ErrorCode;
 import com.mugen.shared.trace.TraceIdHolder;
 import com.mugen.web.error.ApiError;
@@ -164,6 +165,26 @@ class GlobalExceptionHandlerTest {
                 .describedAs("both 4xx responses must be logged")
                 .hasSize(2)
                 .allMatch(event -> event.getLevel() == Level.WARN);
+    }
+
+    /**
+     * The 500 path mints its traceId when no span is active and never stores it to
+     * MDC, so the correlation field cannot carry it — the handler has to log the id
+     * explicitly, or the one it hands the user leads to no log line at all.
+     */
+    @Test
+    @DisplayName("a 500 logs the very traceId it returns, so the quoted id finds its log line")
+    void unexpectedExceptionLogsTheTraceIdItReturns() throws Exception {
+        ListAppender<ILoggingEvent> logged = captureHandlerLogs();
+
+        String body = mockMvc.perform(get("/test/boom"))
+                .andExpect(status().isInternalServerError())
+                .andReturn().getResponse().getContentAsString();
+        String reported = JsonPath.read(body, "$.traceId");
+
+        assertThat(logged.list).hasSize(1);
+        assertThat(logged.list.getFirst().getLevel()).isEqualTo(Level.ERROR);
+        assertThat(logged.list.getFirst().getFormattedMessage()).contains(reported);
     }
 
     /**

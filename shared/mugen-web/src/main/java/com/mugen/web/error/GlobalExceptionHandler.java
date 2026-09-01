@@ -67,11 +67,14 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
      */
     @ExceptionHandler(Exception.class)
     public ProblemDetail handleUnexpected(Exception ex) {
-        log.error("Unhandled exception", ex);
-
-        // Resolved once and threaded through: the detail quotes the id, so a second
-        // resolve could put a different one in the same response.
+        // Resolved before the log, and logged explicitly: with no active span the id
+        // is freshly minted and never stored to MDC, so relying on the correlation
+        // field would leave the traceId in the response quoted in no log line at all —
+        // the decoration the logging rules forbid. Threaded through so the detail and
+        // the log carry the same id.
         String traceId = TraceIdHolder.resolve();
+        log.error("Unhandled exception traceId={}", traceId, ex);
+
         return problem(HttpStatus.INTERNAL_SERVER_ERROR, ErrorCode.INTERNAL_ERROR,
                 "An unexpected error occurred. Quote traceId %s when reporting it.".formatted(traceId), traceId);
     }
