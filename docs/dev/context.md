@@ -4,6 +4,70 @@ Companion to tasks.md, which is the checklist. This file holds only what the cod
 and git history do NOT already say: live status, decisions and their reasoning,
 and traps worth not rediscovering.
 
+## Status (2026-09-05) — the 2.11 gate is closed
+**mugen-auth is done as the template.** Every box on the 2.11 exit gate and every open
+item in 2.13 is ticked. `./mvnw verify` green: 107 unit + slice, 59 integration, ~45s.
+The service was also built as an image and run against the compose stack — see below.
+
+What this session changed, in the order it happened:
+
+1. **The bar a test has to meet** is written in CLAUDE.md next to the tier rule
+   (`### What a test has to earn`), which was 2.13's actual deliverable. It also settles
+   the two questions 2.13 left open: derive every list from the same place production
+   derives it, and keep URL paths literal.
+2. **`OpenApiTest` rewritten against that bar** — 13 tests, none of them a literal copied
+   out of `OpenApiConfig`. Set equality against the handler mappings replaced the
+   hand-listed paths; therapi's runtime javadoc replaced the three asserted English
+   sentences.
+3. **The regression holes are filled**: `slice/AuthControllerTest`,
+   `slice/SessionControllerTest`, `slice/TokenIntrospectControllerTest`,
+   `unit/GoogleProfileMapperTest`, `integration/RevocationCacheTest`,
+   `integration/AuthorizationRequestStoreTest`, and `integration/SsoSignInTest` — the
+   first test in this project that can see a proxy boundary.
+4. **Three bugs, all found by writing those tests.** See "The recovery that could not
+   run" below, the provider-parse fix in `AuthorizationRequestStore`, and the revocation
+   decision.
+5. **Revocation is enforced by mugen-auth itself** — the last open design question.
+6. **`Dockerfile` + `Dockerfile.dockerignore`**, built and run for real.
+7. **Library and layering pass**: mugen-shared no longer puts Jackson 2 databind on every
+   service's classpath, its contract test uses the Jackson 3 mapper services actually
+   serialize with, and `CurrentUser` moved from `controller` to `token`.
+
+### Two things mugen-test gained, and every service inherits
+- `SecurityMethodArguments` — a `@WebMvcTest` applies **no** security auto-configuration,
+  so nothing contributes `AuthenticationPrincipalArgumentResolver` and any handler taking
+  `@AuthenticationPrincipal` answers 500 while MVC tries to instantiate a `Jwt` as a model
+  attribute. The slice tier has no filter chain; that is deliberate, not an omission.
+- `Callers.token()` / `Callers.authenticatedAs(...)` — for the same reason,
+  `SecurityMockMvcRequestPostProcessors.jwt()` does nothing at the slice tier: it hands
+  the authentication to a chain to install. These put it in the `SecurityContextHolder`,
+  and spring-security-test's listener clears it after each method.
+
+### Resuming
+The tree is clean and `./mvnw verify` is green. Nothing is half-finished.
+
+1. Start Docker Desktop; `docker info` answering is the check.
+2. `docker compose up -d`, then `cd services/mugen-auth && ../../mvnw spring-boot:run`.
+3. **A container named `mugen-auth-deploy-check` may still be running** from this
+   session's deploy verification, published on host port 18081 — it is the service
+   itself, built from the new Dockerfile. `docker rm -f mugen-auth-deploy-check` when it
+   is in the way. The compose stack was left up too.
+4. The image is rebuilt with
+   `docker build -f services/mugen-auth/Dockerfile -t mugen-auth .` **from the repository
+   root** — the context has to include the parent pom and `shared/`.
+
+### What to do next, in order
+1. **Phase 3, the gateway.** The gate exists to make mugen-auth safe to copy, and it is
+   closed. Read "Authn vs authz" below before writing 3.2's SecurityConfig — no
+   public-vs-protected route list — and note that the gateway's revocation check is now
+   the *second* one on that key, not the only one, which is the intended end state.
+2. **2.12, the device grant**, whenever it is wanted. It is feature work, deliberately not
+   on the gate, and `spring-boot-restclient` sits unused in mugen-auth's pom until it
+   starts.
+3. Two smaller things left deliberately: `http/auth.http` has not been extended with the
+   endpoints added since it was written (the DevEx half of the quality review), and
+   nothing ships logs to Loki yet.
+
 ## Status (2026-08-11)
 **The test suite has a structure now** — three tiers, `shared/mugen-test`, one context
 and one container for the whole run. See "Test tiers" below and the `Testing` section
@@ -464,7 +528,9 @@ point Google's own credential check takes over.
 Not on the gate, deferred by choice:
 - Nothing ships logs to Loki. Grafana has the datasource but no writer; services
   need a Loki appender (loki-logback-appender) when logging is set up.
-- **Orphan user row in `OAuthService.linkOrCreate`** (pre-existing, spotted while
+- **Orphan user row in `OAuthService.linkOrCreate`** — **closed 2026-09-05**, see "The
+  recovery that could not run": the loser of the race now rolls back and takes its own
+  half-made account with it. Original description: (pre-existing, spotted while
   wiring 2.8). Narrower now that a transaction actually wraps the two writes — before
   2026-08-04 there was none, so any failure between them orphaned a row, not just a
   race. Two first-ever sign-ins for the same provider account can both find
@@ -475,7 +541,7 @@ Not on the gate, deferred by choice:
   narrow window and a matching provider account, so it is not urgent; the fix is
   to delete the losing row in the catch block.
 
-## Up next
+## Up next (superseded by the 2026-09-05 status at the top of this file)
 1. **2.11 exit gate — Phase 3 does not start until all of it is ticked.** Full list in
    tasks.md; four items remain, in the order given under "What is left on the 2.11 gate"
    above. Swagger UI makes the endpoint sweep cheap — `/swagger-ui.html` on port 8081

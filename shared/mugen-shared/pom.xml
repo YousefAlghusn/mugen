@@ -22,14 +22,31 @@
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
         </dependency>
+        <!--
+            Annotations only. The event contracts are records that say how they map
+            to JSON; deciding what maps them is the consuming service's business,
+            and every mugen service is on Boot 4's Jackson 3 (tools.jackson).
+            Declaring databind here put Jackson 2 on all eleven classpaths for the
+            sake of one annotation.
+
+            The group id is not a mistake: annotations stayed at com.fasterxml in
+            Jackson 3 deliberately, so one artifact serves both majors — which is
+            exactly why a contract jar may depend on it.
+        -->
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-databind</artifactId>
+            <artifactId>jackson-annotations</artifactId>
         </dependency>
-        <!-- Instant (de)serialization for the event contracts' occurredAt. -->
+        <!--
+            Jackson 3, test scope: the contract test must use the mapper the
+            services actually serialize with, or it is asserting a wire format
+            nothing produces. Nothing for java.time is needed with it — Jackson 3
+            has it built in, which is what jackson-datatype-jsr310 used to be for.
+        -->
         <dependency>
-            <groupId>com.fasterxml.jackson.datatype</groupId>
-            <artifactId>jackson-datatype-jsr310</artifactId>
+            <groupId>tools.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <scope>test</scope>
         </dependency>
 
         <!--

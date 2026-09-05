@@ -1,7 +1,5 @@
 package com.mugen.auth.integration;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mugen.auth.support.AuthFixtures;
 import com.mugen.shared.error.ErrorCode;
 import com.mugen.test.IntegrationTest;
@@ -13,6 +11,8 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.util.List;
 
@@ -44,7 +44,7 @@ class AuthFlowTest {
     private AuthFixtures auth;
 
     @Autowired
-    private ObjectMapper objectMapper;
+    private JsonMapper json;
 
     /**
      * The cookie's attributes are asserted in {@code slice/AuthControllerTest}, which is
@@ -103,8 +103,8 @@ class AuthFlowTest {
 
         // Identical bodies apart from traceId — otherwise this endpoint tells an
         // attacker which addresses have accounts.
-        JsonNode a = objectMapper.readTree(wrongPassword.getResponse().getContentAsString());
-        JsonNode b = objectMapper.readTree(unknownEmail.getResponse().getContentAsString());
+        JsonNode a = json.readTree(wrongPassword.getResponse().getContentAsString());
+        JsonNode b = json.readTree(unknownEmail.getResponse().getContentAsString());
         assertThat(a.get("detail")).isEqualTo(b.get("detail"));
         assertThat(a.get("code")).isEqualTo(b.get("code"));
     }

@@ -2,6 +2,7 @@ package com.mugen.auth.controller;
 
 import com.mugen.auth.dto.MeResponse;
 import com.mugen.auth.exception.AuthExceptions;
+import com.mugen.auth.token.CurrentUser;
 import com.mugen.web.openapi.Throws;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;

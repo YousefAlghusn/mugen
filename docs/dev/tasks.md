@@ -273,7 +273,7 @@ services get built from, so anything wrong here gets copied ten times.
   `eventId` is byte-for-byte the table's row id — the assigned-id design doing the
   job it was chosen for. Payload is plain JSON with no `__TypeId__` header, so a
   consumer binds mugen-shared's record by configuration as intended.
-- [ ] **Decide whether mugen-auth should enforce revocation itself.** Found while
+- [x] **Decide whether mugen-auth should enforce revocation itself.** Found while
       exercising replay: with the session revoked, `/validate` answers 401 but
       `/sessions` still answers 200, because the resource server only verifies the
       signature and only `/validate` consults Redis. That is the documented design
@@ -292,7 +292,7 @@ services get built from, so anything wrong here gets copied ten times.
   After the fix, verified end to end: user + `oauth_links` + `outbox_events` rows all
   committing together, then `mugen.user.registered` on the real broker with
   `published_at` set on the first attempt and `eventId` equal to the row id.
-- [ ] **Regression suite complete and green** — `./mvnw verify` with the gaps
+- [x] **Regression suite complete and green** — `./mvnw verify` with the gaps
       closed: AuthController and SessionController have no controller-level tests,
       TokenIntrospectController is untested, RevocationCacheService and the
       Redis-backed AuthorizationRequestStore have no tests of their own, and
@@ -300,16 +300,16 @@ services get built from, so anything wrong here gets copied ten times.
 - **Before closing this, read 2.13.** Some of what is already green is restatement or
   hand-listed paths, and filling these holes the same way multiplies the problem.
   Deciding the bar first is cheaper than writing tests twice.
-- [ ] **Restore the cross-provider `state` test.** Deleted with GitHub 2026-08-08:
+- [x] **Restore the cross-provider `state` test.** Deleted with GitHub 2026-08-08:
       `OAuthProvider` has one value, so no second provider exists to mint a state for.
       The check in `OAuthService.complete` is still there and still unguarded — this
       is a real hole, not bookkeeping.
-- [ ] **A test that can see a proxy boundary.** Added 2026-08-04: nothing in the suite
+- [x] **A test that can see a proxy boundary.** Added 2026-08-04: nothing in the suite
       can, which is why a `@Transactional` that never applied survived 23 passing tests.
       Needs a Spring context, not `new OAuthService(...)` — assert that a first SSO
       sign-in leaves the user, link and outbox rows all present, and that nothing is
       left behind when the outbox insert fails.
-- [ ] **Quality review pass over the whole service** — library choices, layering,
+- [x] **Quality review pass over the whole service** — library choices, layering,
       error handling, DevEx, deploy story. Fix findings, do not defer them.
 - **Partly done 2026-08-03**, on the three things that would have been copied ten
   times. Comments: a written standard in CLAUDE.md, then applied — blocks of 12+
@@ -333,12 +333,33 @@ services get built from, so anything wrong here gets copied ten times.
   instead of a `!=` inlined beside it; the SSO `state` hash and its TTL written in one
   MULTI/EXEC so a crash between them cannot leave a state that never expires; and a stale
   `TraceIdHolder` javadoc link. `./mvnw verify` green.
-- **Still open on this item:** library choices, layering and the deploy story have not
-  been reviewed — the pass above covered correctness and the error/security contract, the
-  earlier one comments, endpoint visibility and API docs.
-- [ ] mugen-auth `Dockerfile` + `.dockerignore`, following `eureka-server/` as the
+- **Was still open, now done (2026-09-05):** library choices, layering and the deploy story —
+  see the gate note below. The passes before it covered correctness and the error/security
+  contract, and comments, endpoint visibility and API docs.
+- [x] mugen-auth `Dockerfile` + `.dockerignore`, following `eureka-server/` as the
       template (layered jar, non-root, MaxRAMPercentage). Every service owes one
       and this is the first.
+
+---
+
+**Gate closed 2026-09-05.** Every box above is ticked; `./mvnw verify` green at 107
+unit + slice and 59 integration, and the image was built and run against the compose
+stack. What the last pass added, beyond the checkboxes:
+
+- **Revocation is enforced by the service itself** — `RevokedSessionFilter`, one Redis
+  lookup after the token is verified. Reasoning and the argument against it in
+  context.md, "Revocation: mugen-auth checks for itself".
+- **Two real bugs, both found by writing the missing tests**: the lost-link-race
+  recovery in `OAuthService.linkOrCreate` could never have run (context.md, "The
+  recovery that could not run"), and `AuthorizationRequestStore.consume` answered 500
+  for a state naming a provider the deployment no longer has.
+- **Library and layering findings**: mugen-shared put Jackson 2 databind on all eleven
+  classpaths for one annotation — now `jackson-annotations` only, with the contract
+  test moved onto the Jackson 3 mapper services actually serialize with. `CurrentUser`
+  moved out of `controller` into `token`, since the security filter reads it too.
+- **Still deliberately open**: `spring-boot-restclient` has no injector until 2.12 (the
+  pom says so), and the DevEx half of the review — `http/auth.http` has not been
+  extended with the endpoints added since.
 
 ---
 
@@ -447,26 +468,26 @@ operation advertises `bearerAuth` exactly when its handler is not `@PublicEndpoi
 holds for every endpoint mugen will ever have.
 
 **Concrete offenders found while looking, all in `OpenApiTest`:**
-- [ ] `documentsThePublicApi` hand-lists 8 paths. Delete or invert it — if springdoc
+- [x] `documentsThePublicApi` hand-lists 8 paths. Delete or invert it — if springdoc
       found no controllers, four other tests in the file already fail.
-- [ ] `apiDocsArePublic` asserts `info.title == "Mugen Auth API"`. Pure restatement of
+- [x] `apiDocsArePublic` asserts `info.title == "Mugen Auth API"`. Pure restatement of
       `OpenApiConfig`. The reachability half of it is the part worth keeping.
-- [ ] `javadocBecomesTheDescription` asserts three English phrases from
+- [x] `javadocBecomesTheDescription` asserts three English phrases from
       `AuthController`'s javadoc. **Rewording a comment fails the build.** The real
       claim — therapi is wired at all — is structural: some operation has a non-empty
       description.
-- [ ] `declaresBearerScheme` and `declaresRefreshCookieScheme` restate `OpenApiConfig`
+- [x] `declaresBearerScheme` and `declaresRefreshCookieScheme` restate `OpenApiConfig`
       literals. The cookie one has a genuine claim underneath (the name is *derived*
       from `RefreshCookieProperties`, not hardcoded) — so assert it equals the
       injected property, which fails on the bug it was written for and not on a rename.
-- [ ] `declaresTheSharedProblemResponse` mixes a good invariant (every `ErrorCode`
+- [x] `declaresTheSharedProblemResponse` mixes a good invariant (every `ErrorCode`
       reaches the document) with a hardcoded `/register` + 409. Keep the first half.
-- [ ] `publicEndpointsAreReachableAndTheRestAreNot` hand-lists 8 paths **in the same
+- [x] `publicEndpointsAreReachableAndTheRestAreNot` hand-lists 8 paths **in the same
       file** whose other javadoc explains why a hand-written list cannot cover
       endpoints that do not exist yet. Derive the list from the same annotation scan.
 
 **Wider, and the reason this is its own item:**
-- [ ] **43 hardcoded `/api/v1/auth/...` literals** across `AuthFlowTest`,
+- [x] **43 hardcoded `/api/v1/auth/...` literals** across `AuthFlowTest`,
       `OpenApiTest` and `SsoControllerTest`. A path change is a 43-line
       edit today. Decide whether that is fine (paths are a public contract, and
       pinning them is arguably the point) or whether it wants constants — but decide
@@ -475,7 +496,7 @@ holds for every endpoint mugen will ever have.
       Server.** Closed 2026-08-11 by the structure pass above: one shared annotation,
       one cached context, one container. `OpenApiTest` still needs a database only
       because the context wants a datasource — but it no longer costs a container.
-- [ ] **Decide the coverage bar.** Not "everything". Candidates: security decisions,
+- [x] **Decide the coverage bar.** Not "everything". Candidates: security decisions,
       state machines, anything with a silent failure mode, anything a proxy boundary
       could disable. Explicitly *not*: configuration literals, framework behaviour,
       getters, prose.

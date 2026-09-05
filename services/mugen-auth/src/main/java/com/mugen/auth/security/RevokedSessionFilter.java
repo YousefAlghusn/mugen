@@ -1,8 +1,8 @@
 package com.mugen.auth.security;
 
-import com.mugen.auth.controller.CurrentUser;
 import com.mugen.auth.exception.AuthExceptions;
 import com.mugen.auth.service.RevocationCacheService;
+import com.mugen.auth.token.CurrentUser;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;

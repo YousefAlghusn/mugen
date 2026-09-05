@@ -1,8 +1,5 @@
 package com.mugen.shared.unit;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.mugen.shared.event.DomainEvent;
 import com.mugen.shared.event.PaymentCompletedEvent;
 import com.mugen.shared.event.PostCreatedEvent;
@@ -15,6 +12,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -33,9 +31,14 @@ class DomainEventContractTest {
 
     private static final Instant WHEN = Instant.parse("2026-07-31T10:15:30Z");
 
-    private final ObjectMapper mapper = new ObjectMapper()
-            .registerModule(new JavaTimeModule())
-            .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+    /**
+     * Jackson 3, unconfigured, because that is what a mugen service has: Boot 4's
+     * default mapper. The previous Jackson 2 mapper here had to be told to write
+     * ISO-8601 dates, which is a setting that no longer exists — so the test was
+     * asserting a wire format arrived at differently from the one production
+     * produces.
+     */
+    private final JsonMapper mapper = JsonMapper.builder().build();
 
     static Stream<DomainEvent> allEventTypes() {
         return Stream.of(

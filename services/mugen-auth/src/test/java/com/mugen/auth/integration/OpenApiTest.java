@@ -1,7 +1,5 @@
 package com.mugen.auth.integration;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.therapi.runtimejavadoc.RuntimeJavadoc;
 import com.mugen.auth.config.AuthApiDocs;
 import com.mugen.auth.config.RefreshCookieProperties;
@@ -27,6 +25,8 @@ import org.springframework.util.AntPathMatcher;
 import org.springframework.web.context.WebApplicationContext;
 import org.springframework.web.method.HandlerMethod;
 import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -68,7 +68,7 @@ class OpenApiTest {
     private WebApplicationContext context;
 
     @Autowired
-    private ObjectMapper objectMapper;
+    private JsonMapper json;
 
     @Autowired
     private MockMvc mockMvc;
@@ -87,7 +87,7 @@ class OpenApiTest {
                 .getResponse()
                 .getContentAsString();
 
-        return objectMapper.readTree(body);
+        return json.readTree(body);
     }
 
     @Test
@@ -137,7 +137,7 @@ class OpenApiTest {
         List<String> required = new ArrayList<>();
         documentedOperations().values().forEach(operation ->
                 operation.path("security").forEach(requirement ->
-                        requirement.fieldNames().forEachRemaining(required::add)));
+                        requirement.propertyNames().forEach(required::add)));
 
         assertThat(required).isNotEmpty();
         assertThat(names(declared)).containsAll(Set.copyOf(required));
@@ -154,7 +154,7 @@ class OpenApiTest {
     void declaresRefreshCookieScheme() throws Exception {
         JsonNode scheme = document().at("/components/securitySchemes/" + AuthApiDocs.REFRESH_COOKIE_SCHEME);
 
-        assertThat(scheme.get("name").asText()).isEqualTo(refreshCookieProperties.name());
+        assertThat(scheme.get("name").asString()).isEqualTo(refreshCookieProperties.name());
     }
 
     /**
@@ -233,7 +233,7 @@ class OpenApiTest {
             fromJavadoc.add(id);
             JsonNode operation = documented.get(id);
 
-            assertThat(operation.path("summary").asText("") + operation.path("description").asText(""))
+            assertThat(operation.path("summary").asString("") + operation.path("description").asString(""))
                     .as("%s has javadoc, so it must carry prose in the document", id)
                     .isNotBlank();
         });
@@ -270,7 +270,7 @@ class OpenApiTest {
             for (Class<? extends AppException> thrown : declaredOn(entry.getValue())) {
                 ApiErrorSpec spec = ApiErrors.of(thrown);
                 String description = documented.get(entry.getKey())
-                        .at("/responses/" + spec.status().value() + "/description").asText();
+                        .at("/responses/" + spec.status().value() + "/description").asString();
 
                 assertThat(description)
                         .as("%s declares %s", entry.getKey(), thrown.getSimpleName())
@@ -299,7 +299,7 @@ class OpenApiTest {
                 .andExpect(jsonPath("$.traceId").isNotEmpty());
 
         String documented = documentedOperations().get("/api/v1/auth/me get")
-                .at("/responses/401/description").asText();
+                .at("/responses/401/description").asString();
 
         assertThat(documented).contains(ErrorCode.TOKEN_INVALID.name());
     }
@@ -324,12 +324,12 @@ class OpenApiTest {
                     ErrorCode code = ErrorCode.valueOf(example.getKey());
                     JsonNode body = example.getValue().path("value");
 
-                    assertThat(body.path("code").asText())
+                    assertThat(body.path("code").asString())
                             .as("%s %s example %s", operation.getKey(), response.getKey(), example.getKey())
                             .isEqualTo(code.name());
                     assertThat(body.path("status").asInt()).isEqualTo(Integer.parseInt(response.getKey()));
-                    assertThat(body.path("type").asText()).isEqualTo(ApiErrors.typeUri(code).toString());
-                    assertThat(body.path("traceId").asText()).isNotBlank();
+                    assertThat(body.path("type").asString()).isEqualTo(ApiErrors.typeUri(code).toString());
+                    assertThat(body.path("traceId").asString()).isNotBlank();
                     checked++;
                 }
             }
@@ -349,7 +349,7 @@ class OpenApiTest {
         documentedOperations().forEach((id, operation) ->
                 properties(operation.path("responses")).forEach(response -> {
                     if (response.getKey().charAt(0) >= '4') {
-                        assertThat(response.getValue().path("description").asText())
+                        assertThat(response.getValue().path("description").asString())
                                 .describedAs("%s → %s", id, response.getKey())
                                 .isNotBlank();
                     }
@@ -431,7 +431,7 @@ class OpenApiTest {
 
     private static List<String> names(JsonNode node) {
         List<String> names = new ArrayList<>();
-        node.fieldNames().forEachRemaining(names::add);
+        node.propertyNames().forEach(names::add);
         return names;
     }
 }
