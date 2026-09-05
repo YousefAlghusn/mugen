@@ -40,6 +40,7 @@ public enum ErrorCode {
     SSO_EMAIL_UNAVAILABLE,
     SSO_EMAIL_NOT_VERIFIED,
     SSO_PROVIDER_ALREADY_LINKED,
+    SSO_SIGN_IN_CONFLICT,
     SSO_REDIRECT_NOT_ALLOWED,
 
     // User (mugen-user)

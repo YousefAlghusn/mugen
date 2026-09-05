@@ -159,6 +159,20 @@ public final class AuthExceptions {
         }
     }
 
+    /**
+     * Two first-ever sign-ins for one provider account, at once. Transient by nature:
+     * the retry finds the link the winner wrote and signs in normally.
+     */
+    @ApiError(code = ErrorCode.SSO_SIGN_IN_CONFLICT,
+            description = "Two sign-ins for the same provider account arrived at once and this one lost the "
+                    + "race. Nothing was created; signing in again resolves it.")
+    public static class SsoSignInConflict extends ConflictException {
+        public SsoSignInConflict(String provider) {
+            super("Another sign-in with the same %s account is already in progress. Please try again."
+                    .formatted(provider));
+        }
+    }
+
     /** One provider per user — {@code uq_oauth_links_user_provider}. */
     @ApiError(code = ErrorCode.SSO_PROVIDER_ALREADY_LINKED,
             description = "This mugen account is already linked to a different account at that provider. "

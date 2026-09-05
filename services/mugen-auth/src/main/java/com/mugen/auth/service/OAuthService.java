@@ -234,16 +234,15 @@ public class OAuthService {
         try {
             oauthLinks.saveAndFlush(OAuthLink.link(user, provider, profile.providerUserId()));
         } catch (DataIntegrityViolationException ex) {
-            // Two first-time sign-ins for the same provider account arriving at once.
-            // uq_oauth_links_provider_account is the real guarantee; the loser of the
-            // race re-reads the winner's link rather than failing a legitimate login.
-            log.debug("Lost the race creating an OAuth link, re-reading provider={}", provider);
-            User winner = oauthLinks.findByProviderAccount(provider, profile.providerUserId())
-                    .map(OAuthLink::getUser)
-                    .orElseThrow(() -> ex);
-            // No event: the caller signs in as the winner, so any account this call
-            // created is unreachable and must not get a profile in mugen-user.
-            return new SsoUser(winner, false);
+            // Two first-time sign-ins for the same provider account at once, refused by
+            // uq_oauth_links_provider_account. Nothing is recoverable from here: after a
+            // failed flush Hibernate replays the same insert before the next statement,
+            // so even a read throws — this used to re-read the winner and could not have
+            // worked. Rolling back is also the better answer, because it takes the
+            // account this call had just created with it rather than leaving one nobody
+            // can ever sign into. The person retries and finds the winner's link.
+            log.warn("Concurrent first sign-in for one provider account, rolling back provider={}", provider);
+            throw new AuthExceptions.SsoSignInConflict(provider.name());
         }
 
         // A first SSO sign-in creates an account exactly as registration does, so it

@@ -292,10 +292,46 @@ class OAuthServiceTest {
         private final PendingAuthorization pending =
                 new PendingAuthorization(OAuthProvider.GOOGLE, "verifier", FRONTEND, "nonce");
 
-        // The cross-provider state test lived here and could not survive GitHub's
-        // removal: OAuthProvider has one value, so no second provider exists to mint a
-        // state for. The check in OAuthService.complete stays — restore the test with
-        // the next provider (docs/dev/context.md, "Removing GitHub SSO").
+        /**
+         * A state is redeemable at the callback of the provider it was issued for, and
+         * at no other — otherwise a code obtained through one provider's flow could be
+         * redeemed against a registration it was never meant for.
+         * <p>
+         * Written over every pair rather than as one hardcoded mismatch, which is what
+         * the version deleted with GitHub was: {@code OAuthProvider} has a single value
+         * today, so the mismatch half covers nothing yet and the matching half is the
+         * live assertion. The day a second provider is added the mismatch half starts
+         * running by itself, which a test naming two providers could never do.
+         */
+        @Test
+        @DisplayName("a state is redeemable only at the callback of the provider it was issued for")
+        void stateIsBoundToTheProviderThatIssuedIt() {
+            for (OAuthProvider issuedFor : OAuthProvider.values()) {
+                for (OAuthProvider presentedAt : OAuthProvider.values()) {
+                    PendingAuthorization issued =
+                            new PendingAuthorization(issuedFor, "verifier", FRONTEND, "nonce");
+
+                    if (issuedFor == presentedAt) {
+                        // Reaches the exchange, which is as far as this test cares: the
+                        // guard is the only thing between the two, and the exchange
+                        // itself has its own tests.
+                        when(tokenClient.getTokenResponse(any()))
+                                .thenThrow(new IllegalStateException("reached the provider"));
+
+                        assertThatThrownBy(() -> oauthService.complete(
+                                presentedAt, issued, "code", "state", RequestContext.unknown()))
+                                .isInstanceOf(AuthExceptions.SsoExchangeFailed.class);
+                    } else {
+                        assertThatThrownBy(() -> oauthService.complete(
+                                presentedAt, issued, "code", "state", RequestContext.unknown()))
+                                // SsoStateInvalid can only come from the guard: past it,
+                                // a failure at the provider is SsoExchangeFailed.
+                                .as("state issued for %s, presented at %s", issuedFor, presentedAt)
+                                .isInstanceOf(AuthExceptions.SsoStateInvalid.class);
+                    }
+                }
+            }
+        }
 
         @Test
         @DisplayName("a callback with no code is refused")
@@ -492,13 +528,17 @@ class OAuthServiceTest {
                     .isInstanceOf(AuthExceptions.SsoProviderAlreadyLinked.class);
         }
 
+        /**
+         * The recovery this used to attempt could not have worked: after a failed flush
+         * Hibernate replays the same insert before the next statement, so the re-read
+         * threw the violation again. Proven against a real database — see
+         * docs/dev/context.md, "The recovery that could not run".
+         */
         @Test
-        @DisplayName("losing the race to create a link signs the user in anyway")
-        void concurrentFirstSignInResolvesToTheWinner() {
-            User winner = userWithId("kaneki", "kaneki@mugen.dev");
+        @DisplayName("losing the race to create a link rolls the whole sign-in back")
+        void concurrentFirstSignInIsRefusedAndRolledBack() {
             when(links.findByProviderAccount(OAuthProvider.GOOGLE, "google-sub-1"))
-                    .thenReturn(Optional.empty())
-                    .thenReturn(Optional.of(OAuthLink.link(winner, OAuthProvider.GOOGLE, "google-sub-1")));
+                    .thenReturn(Optional.empty());
             when(users.findByEmail("kaneki@mugen.dev")).thenReturn(Optional.empty());
             when(users.existsByUsername(any())).thenReturn(false);
             when(users.saveAndFlush(any())).thenAnswer(invocation -> {
@@ -508,12 +548,12 @@ class OAuthServiceTest {
             });
             when(links.saveAndFlush(any())).thenThrow(new DataIntegrityViolationException("uq_oauth_links"));
 
-            OAuthService.SsoUser resolved = oauthService.linkOrCreate(OAuthProvider.GOOGLE, verifiedProfile());
+            assertThatThrownBy(() -> oauthService.linkOrCreate(OAuthProvider.GOOGLE, verifiedProfile()))
+                    .isInstanceOf(AuthExceptions.SsoSignInConflict.class);
 
-            // The unique index is the guarantee; the loser re-reads rather than
-            // showing a legitimate user an error on their very first sign-in.
-            assertThat(resolved.user()).isSameAs(winner);
-            assertThat(resolved.created()).isFalse();
+            // No event for an account that is about to be rolled back: a profile in
+            // mugen-user for a user row that will not exist is worse than none.
+            verifyNoInteractions(userEvents);
         }
     }
 
@@ -569,32 +609,6 @@ class OAuthServiceTest {
 
             // The account is not new. mugen-user already has its profile, and a
             // second event would be an update it has no way to interpret.
-            verifyNoInteractions(userEvents);
-        }
-
-        /**
-         * Losing the link race means signing in as the winner, so the account this
-         * call created is unreachable. Announcing it would have mugen-user build a
-         * profile for an account nobody can ever log into.
-         */
-        @Test
-        @DisplayName("the loser of a first-sign-in race announces nothing")
-        void raceLoserPublishesNothing() {
-            User winner = userWithId("kaneki", "kaneki@mugen.dev");
-            when(links.findByProviderAccount(OAuthProvider.GOOGLE, "google-sub-1"))
-                    .thenReturn(Optional.empty())
-                    .thenReturn(Optional.of(OAuthLink.link(winner, OAuthProvider.GOOGLE, "google-sub-1")));
-            when(users.findByEmail("kaneki@mugen.dev")).thenReturn(Optional.empty());
-            when(users.existsByUsername(any())).thenReturn(false);
-            when(users.saveAndFlush(any())).thenAnswer(invocation -> {
-                User created = invocation.getArgument(0);
-                ReflectionTestUtils.setField(created, "id", UUID.randomUUID());
-                return created;
-            });
-            when(links.saveAndFlush(any())).thenThrow(new DataIntegrityViolationException("uq_oauth_links"));
-
-            oauthService.linkOrCreate(OAuthProvider.GOOGLE, verifiedProfile());
-
             verifyNoInteractions(userEvents);
         }
     }
