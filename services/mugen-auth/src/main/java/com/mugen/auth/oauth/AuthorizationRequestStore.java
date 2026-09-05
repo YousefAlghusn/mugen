@@ -81,11 +81,27 @@ public class AuthorizationRequestStore {
             return Optional.empty();
         }
 
-        return Optional.of(new PendingAuthorization(
-                OAuthProvider.valueOf(field(stored, FIELD_PROVIDER)),
+        return providerOf(field(stored, FIELD_PROVIDER)).map(provider -> new PendingAuthorization(
+                provider,
                 field(stored, FIELD_CODE_VERIFIER),
                 field(stored, FIELD_REDIRECT_URI),
                 field(stored, FIELD_BROWSER_NONCE)));
+    }
+
+    /**
+     * An entry naming a provider this deployment does not have is refused as though it
+     * had expired. Reachable without anything being wrong: entries outlive a deployment
+     * by up to their TTL, so a provider removed from the enum — GitHub was — leaves
+     * in-flight sign-ins that would otherwise fail on {@code valueOf} as a 500.
+     */
+    private static Optional<OAuthProvider> providerOf(String name) {
+        try {
+            return Optional.of(OAuthProvider.valueOf(name));
+        } catch (IllegalArgumentException | NullPointerException unknown) {
+            log.warn("Discarded an SSO state issued for a provider this deployment does not have provider={}",
+                    name);
+            return Optional.empty();
+        }
     }
 
     private static String field(Map<Object, Object> stored, String name) {
