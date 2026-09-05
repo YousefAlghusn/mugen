@@ -43,34 +43,19 @@ class AuthFlowTest {
     @Autowired
     private ObjectMapper objectMapper;
 
+    /**
+     * The cookie's attributes are asserted in {@code slice/AuthControllerTest}, which is
+     * the lowest tier that can see them. What only this tier can say is that a real
+     * registration, against a real database, ends in a real token pair.
+     */
     @Test
-    @DisplayName("register returns 201 with an access token and sets a hardened refresh cookie")
+    @DisplayName("register returns 201 with an access token and a refresh cookie")
     void registerIssuesTokens() throws Exception {
         AuthFixtures.Account account = auth.register();
 
         assertThat(account.response().getResponse().getStatus()).isEqualTo(201);
         assertThat(account.accessToken()).isNotBlank();
-
-        Cookie cookie = account.refresh();
-        assertThat(cookie).isNotNull();
-        assertThat(cookie.isHttpOnly()).isTrue();
-        assertThat(cookie.getSecure()).isTrue();
-        assertThat(cookie.getPath()).isEqualTo("/api/v1/auth");
-
-        // SameSite is not exposed on jakarta Cookie; assert on the raw header.
-        assertThat(account.response().getResponse().getHeader(HttpHeaders.SET_COOKIE))
-                .contains("SameSite=Strict");
-    }
-
-    @Test
-    @DisplayName("the refresh token never appears in the response body")
-    void refreshTokenIsCookieOnly() throws Exception {
-        AuthFixtures.Account account = auth.register();
-
-        String body = account.response().getResponse().getContentAsString();
-
-        assertThat(body).doesNotContain(account.refresh().getValue());
-        assertThat(body).doesNotContain("refreshToken");
+        assertThat(account.refresh()).isNotNull();
     }
 
     @Test

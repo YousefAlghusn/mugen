@@ -1,9 +1,5 @@
 package com.mugen.auth.slice;
 
-import com.mugen.auth.config.JwtProperties;
-import com.mugen.auth.config.RefreshCookieProperties;
-import com.mugen.auth.config.SsoProperties;
-import com.mugen.auth.controller.RefreshTokenCookies;
 import com.mugen.auth.controller.SsoController;
 import com.mugen.auth.controller.SsoStateCookies;
 import com.mugen.auth.dto.TokenPair;
@@ -11,14 +7,12 @@ import com.mugen.auth.entity.OAuthProvider;
 import com.mugen.auth.exception.AuthExceptions;
 import com.mugen.auth.oauth.PendingAuthorization;
 import com.mugen.auth.service.OAuthService;
+import com.mugen.auth.support.CookieComponents;
 import com.mugen.test.SliceTest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
-import org.springframework.core.io.ByteArrayResource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -43,7 +37,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * this flow and are invisible from a service-level test.
  */
 @SliceTest(SsoController.class)
-@Import(SsoControllerTest.CookieComponents.class)
+@Import(CookieComponents.class)
 class SsoControllerTest {
 
     private static final String FRONTEND = "http://localhost:4200/auth/callback";
@@ -54,44 +48,6 @@ class SsoControllerTest {
     @MockitoBean
     private OAuthService oauthService;
 
-    /**
-     * Real cookie builders rather than mocks — the attributes they emit are exactly
-     * what this test exists to pin down.
-     */
-    @TestConfiguration
-    static class CookieComponents {
-
-        @Bean
-        RefreshCookieProperties refreshCookieProperties() {
-            return new RefreshCookieProperties("mugen_refresh", "/api/v1/auth", true, "Strict");
-        }
-
-        @Bean
-        SsoProperties ssoProperties() {
-            return new SsoProperties(Duration.ofMinutes(5), FRONTEND, List.of(FRONTEND));
-        }
-
-        @Bean
-        JwtProperties jwtProperties() {
-            return new JwtProperties(
-                    new ByteArrayResource(new byte[0]),
-                    new ByteArrayResource(new byte[0]),
-                    "https://mugen.dev/auth",
-                    Duration.ofMinutes(15),
-                    Duration.ofDays(30),
-                    Duration.ofMinutes(15));
-        }
-
-        @Bean
-        RefreshTokenCookies refreshTokenCookies(RefreshCookieProperties refresh, JwtProperties jwt) {
-            return new RefreshTokenCookies(refresh, jwt);
-        }
-
-        @Bean
-        SsoStateCookies ssoStateCookies(RefreshCookieProperties refresh, SsoProperties sso) {
-            return new SsoStateCookies(refresh, sso);
-        }
-    }
 
     private static PendingAuthorization pending() {
         return new PendingAuthorization(OAuthProvider.GOOGLE, "verifier", FRONTEND, "nonce");

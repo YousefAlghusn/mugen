@@ -1,5 +1,6 @@
 package com.mugen.test;
 
+import com.mugen.test.support.SecurityMethodArguments;
 import com.mugen.web.error.GlobalExceptionHandler;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
@@ -35,6 +36,10 @@ import java.lang.annotation.Target;
  *       needs the bean before any request is dispatched, whether or not the test presents
  *       a token. A real one would need the service's keys, which is not what a controller
  *       slice is testing.</li>
+ *   <li>{@link SecurityMethodArguments}, so a handler taking {@code @AuthenticationPrincipal}
+ *       is given one. A slice applies no security auto-configuration, so nothing else
+ *       contributes that resolver and the parameter is treated as a model attribute
+ *       instead — a 500 with nothing to do with what the test is asserting.</li>
  * </ul>
  * <p>
  * It has to be {@code @MockitoBean} rather than a {@code @Bean} in an imported
@@ -61,7 +66,7 @@ import java.lang.annotation.Target;
 @Documented
 @WebMvcTest
 @ActiveProfiles("test")
-@Import(GlobalExceptionHandler.class)
+@Import({GlobalExceptionHandler.class, SecurityMethodArguments.class})
 @MockitoBean(types = JwtDecoder.class)
 public @interface SliceTest {
 
