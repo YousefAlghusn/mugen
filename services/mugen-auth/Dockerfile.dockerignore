@@ -1,0 +1,41 @@
+# Read by BuildKit in preference to a .dockerignore at the context root, which is
+# what lets this service own its exclusions while building from the repository
+# root (see the header of Dockerfile).
+#
+# The context is the whole repository, so this is subtractive: everything the
+# build does not need, plus everything that must never enter an image.
+
+# Never in an image: the signing key is mounted at runtime.
+**/keys/private.pem
+.env
+.env.*
+!.env.example
+http/http-client.private.env.json
+
+# Build output — would be shipped to the daemon and invalidate the cache on
+# every local build.
+**/target/
+docker-data/
+.logs/
+*.log
+
+# Not part of any build.
+.git/
+.gitignore
+.gitattributes
+.idea/
+.vscode/
+*.iml
+docs/
+http/
+sd/
+config/
+compose.yml
+**/Dockerfile
+**/Dockerfile.dockerignore
+**/.dockerignore
+
+# Other modules. mugen-auth needs the parent pom and shared/, and nothing else.
+eureka-server/
+services/*
+!services/mugen-auth/

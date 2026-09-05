@@ -8,6 +8,13 @@
 # reached by service name, and Kafka must use the INTERNAL listener (29092).
 # From the host those names do not resolve, and 29092 is not published.
 
+mugen:
+  jwt:
+    # Mounted, never built into the image: an image is pulled by anyone with read
+    # access to the registry, and a key baked into one cannot be rotated without a
+    # rebuild. public.pem stays on the classpath — every service needs it to verify.
+    private-key: ${JWT_PRIVATE_KEY_PATH:file:/run/secrets/mugen-auth/private.pem}
+
 spring:
   datasource:
     url: jdbc:sqlserver://${SQLSERVER_HOST:sqlserver}:${SQLSERVER_PORT:1433};databaseName=${SQLSERVER_DB:mugen_auth};encrypt=true;trustServerCertificate=true
