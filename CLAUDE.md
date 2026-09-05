@@ -135,6 +135,49 @@ cannot disagree by forgetting to rename a class:
   bounded context, and sharing those is what makes a shared library an anti-pattern.
   Write them as an object mother returning a fluent builder.
 
+### What a test has to earn
+A test earns its place by **failing when behaviour breaks, and only then**. Coverage is
+not the bar: a suite that goes red on a rename is a suite that gets ignored on the one
+day it is right.
+
+**Worth a test**, at the lowest tier that can see it:
+- **Security decisions** — who is refused, what is never disclosed, what a refusal costs
+  an attacker. Both directions, always: the refusal *and* the case that must still pass.
+- **Rules and state machines** — rotation, replay, linking, backoff. Anywhere the next
+  state is a decision rather than a store.
+- **Silent failure modes** — a wrong answer that still returns 200: a document that
+  promises what the filter chain does not do, an event nobody publishes, a validation
+  that never runs.
+- **Anything a proxy implements** — integration tier, no exceptions. See the rule above.
+- **A bug that reached a running service**, pinned at the tier that could have seen it.
+
+**Not worth one**: configuration literals, framework behaviour, getters, javadoc prose,
+that a bean exists, or that a constant equals itself.
+
+Three ways to fail the bar while looking like coverage:
+- **Restatement** — asserting a literal copied from the source. It has no independent
+  idea of what is right, so it cannot fail for a reason that matters.
+  `assertThat(title).isEqualTo("Mugen Auth API")` is `OpenApiConfig`, retyped.
+- **Brittle** — asserting an incidental detail: a sentence of prose, a title, an order
+  nothing depends on. A safe change goes red, and the fix is always to edit the test.
+- **Hand-listed** — enumerating what exists today. It cannot fail when something is
+  *added*, which is exactly when the rule needed enforcing.
+
+Against all three, the **invariant**: state the rule, and derive its subjects from the
+same place production derives them. `OpenApiTest.documentAgreesWithTheFilterChain` — an
+operation advertises `bearerAuth` exactly when its handler is not `@PublicEndpoint` —
+holds for every endpoint mugen will ever have, including the ones nobody has written.
+
+- **Derive the list, never type it.** Iterate `ErrorCode.values()`, the handler
+  mappings, `OAuthProvider.values()`. A loop over the enum covers the value added next
+  year; eight string literals cover eight things that already work.
+- **URL paths are the deliberate exception and stay literal.** `/api/v1/auth/login` is a
+  public contract with clients on the other side of it; a test reading the path from the
+  same constant the controller does could never notice that contract changing. The 43
+  literals in this suite are the point, not a debt.
+- **One reason to fail.** A test that goes red for two unrelated changes gets fixed by
+  deleting whichever assertion is inconvenient that day.
+
 ## Services
 - mugen-shared        (shared DTOs, Kafka contracts, utils)
 - mugen-auth          (JWT, SSO, sessions — SQL Server)
