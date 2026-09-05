@@ -30,6 +30,9 @@ import java.util.UUID;
         Every operation is scoped to the caller's own user id, taken from the access token. \
         There is no user id in any path or parameter here, deliberately: one would be an \
         invitation to pass somebody else's.""")
+// A revoked session may not manage sessions — least of all these, which are what somebody
+// uses to eject an attacker. See RevokedSessionFilter.
+@Throws(AuthExceptions.TokenRevoked.class)
 public class SessionController {
 
     private final SessionService sessions;

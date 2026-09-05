@@ -184,6 +184,61 @@ Consequences worth knowing:
   was the one answered inside `ResponseEntityExceptionHandler`, which builds its own
   body.
 
+## Revocation: mugen-auth checks for itself (2026-09-05)
+The last open question from the first real run, and the answer is **yes, the service
+enforces revocation on its own requests** — `RevokedSessionFilter`, one Redis lookup
+after the bearer token is verified.
+
+The finding was that with a session revoked, `/validate` answered 401 while `/sessions`
+still answered 200, because only `/validate` consulted Redis. Both arguments were real:
+
+- *Against.* The gateway is the only entry point and already makes this exact check
+  against this exact key. A second check is redundant work on every request, and
+  "mugen-auth makes no per-request lookups" was a deliberate property.
+- *For, and it won.* "The gateway is the only entry point" is an architecture rule, not
+  a boundary anything enforces — nothing in the repo stops a service, a port-forward or
+  a misrouted request reaching auth directly. And of all the endpoints to leave open to
+  a revoked token, these are the worst: `/sessions` is what a person uses to eject an
+  attacker, so a stolen-but-revoked token could re-revoke the victim's sessions for the
+  remaining life of the access token.
+
+What made it cheap: the lookup is Redis, not the database — which is what the "no
+per-request lookups" property was actually protecting — the key and the client already
+exist, and this service's traffic is sign-ins rather than page loads.
+
+Consequences worth knowing:
+
+- **`/validate` lost its own check** and is now just its status. The endpoint stopped
+  being the one place revocation was enforced, so keeping a second copy inside it would
+  have been the same fact in two places.
+- **`TOKEN_REVOKED` is now reachable on every secured endpoint**, so both secured
+  controllers carry `@Throws(AuthExceptions.TokenRevoked.class)` at class level and the
+  document says so.
+- **The filter is constructed in `SecurityConfig`, not declared a bean.** A `Filter`
+  bean is also registered with the servlet container, where it would run a second time
+  outside the security chain, before anything is authenticated.
+- The gateway still does its check (Phase 3). Two checks of one Redis key is the
+  intended end state, not a duplication to remove later.
+
+## The recovery that could not run (2026-09-05)
+`OAuthService.linkOrCreate` caught the unique-index violation from a lost link race and
+re-read the winner's row, so the loser "signs in as the winner rather than seeing an
+error". **That code could never have worked**, and it took a real database to find out:
+after a failed flush Hibernate replays the same insert before the next statement, so the
+re-read threw the identical `DataIntegrityViolationException`. Proven with a probe
+against SQL Server — the second exception is byte-for-byte the first.
+
+The fix is not to recover but to let the transaction die: the loser rolls back and the
+person retries into the winner's link. That also closes the orphan-row gap this file had
+open, because the losing account goes with the transaction instead of being left with no
+link, no password and a username nobody can reuse. `SSO_SIGN_IN_CONFLICT` tells the SPA
+to try again.
+
+Generalises: **inside a transaction, a constraint violation is the end of that
+transaction.** Anything phrased as "catch the violation and read what the winner wrote"
+needs a new transaction, and is usually better written as "roll back and let the caller
+retry".
+
 ## Removing GitHub SSO, and what replaces it (2026-08-08)
 GitHub was a second **authorization-code** provider. Same redirect, same PKCE, same
 `state`, same callback — only the user-info JSON differed. It exercised

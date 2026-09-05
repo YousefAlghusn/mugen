@@ -3,6 +3,7 @@ package com.mugen.auth.integration;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mugen.auth.support.AuthFixtures;
+import com.mugen.shared.error.ErrorCode;
 import com.mugen.test.IntegrationTest;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.DisplayName;
@@ -12,6 +13,8 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+
+import java.util.List;
 
 import static com.mugen.auth.support.AuthFixtures.PASSWORD;
 import static com.mugen.auth.support.AuthFixtures.uniqueEmail;
@@ -192,6 +195,32 @@ class AuthFlowTest {
     void protectedEndpointsRequireToken() throws Exception {
         mockMvc.perform(get("/api/v1/auth/me")).andExpect(status().isUnauthorized());
         mockMvc.perform(get("/api/v1/auth/sessions")).andExpect(status().isUnauthorized());
+    }
+
+    /**
+     * The finding this service was left with after its first real run: with the session
+     * revoked, {@code /validate} answered 401 while {@code /sessions} still answered 200,
+     * because only {@code /validate} consulted Redis. The access token is signature-valid
+     * for its whole TTL either way — so the session-management endpoints stayed open to a
+     * token belonging to a session someone had just ended, which is the opposite of what
+     * ending it is for.
+     * <p>
+     * Settled at the 2.11 review: mugen-auth checks for itself rather than trusting that
+     * every request came through the gateway. See {@code RevokedSessionFilter}.
+     */
+    @Test
+    @DisplayName("a revoked session's access token stops working on every endpoint, not only /validate")
+    void revocationIsEnforcedByTheServiceItself() throws Exception {
+        AuthFixtures.Account account = auth.register();
+
+        mockMvc.perform(post("/api/v1/auth/logout").cookie(account.refresh()))
+                .andExpect(status().isNoContent());
+
+        for (String endpoint : List.of("/api/v1/auth/validate", "/api/v1/auth/me", "/api/v1/auth/sessions")) {
+            mockMvc.perform(get(endpoint).header(HttpHeaders.AUTHORIZATION, account.bearer()))
+                    .andExpect(status().isUnauthorized())
+                    .andExpect(jsonPath("$.code").value(ErrorCode.TOKEN_REVOKED.name()));
+        }
     }
 
     @Test

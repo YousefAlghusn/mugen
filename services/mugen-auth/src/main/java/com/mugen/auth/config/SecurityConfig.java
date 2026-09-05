@@ -1,11 +1,15 @@
 package com.mugen.auth.config;
 
+import com.mugen.auth.security.RevokedSessionFilter;
+import com.mugen.auth.service.RevocationCacheService;
 import com.mugen.web.security.ProblemAccessDeniedHandler;
 import com.mugen.web.security.ProblemAuthenticationEntryPoint;
 import com.mugen.web.security.PublicEndpoint;
 import com.mugen.web.security.PublicEndpointMatcher;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -15,7 +19,9 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
+import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.web.servlet.HandlerExceptionResolver;
 
 import java.util.Collection;
 import java.util.List;
@@ -44,7 +50,10 @@ public class SecurityConfig {
                                     JwtAuthenticationConverter jwtAuthenticationConverter,
                                     PublicEndpointMatcher publicEndpointMatcher,
                                     ProblemAuthenticationEntryPoint problemAuthenticationEntryPoint,
-                                    ProblemAccessDeniedHandler problemAccessDeniedHandler) throws Exception {
+                                    ProblemAccessDeniedHandler problemAccessDeniedHandler,
+                                    RevocationCacheService revocationCacheService,
+                                    @Lazy @Qualifier("handlerExceptionResolver")
+                                    HandlerExceptionResolver handlerExceptionResolver) throws Exception {
 
         return http
                 // The token is the whole state; a JSESSIONID would be a second,
@@ -81,6 +90,15 @@ public class SecurityConfig {
                 .exceptionHandling(exceptions -> exceptions
                         .authenticationEntryPoint(problemAuthenticationEntryPoint)
                         .accessDeniedHandler(problemAccessDeniedHandler))
+
+                // After the token is verified, because it only has a question to ask
+                // about a token that turned out to be ours. Constructed here rather
+                // than declared a bean: a Filter bean is also registered with the
+                // servlet container, where it would run a second time outside this
+                // chain, before anything has been authenticated.
+                .addFilterAfter(
+                        new RevokedSessionFilter(revocationCacheService, handlerExceptionResolver),
+                        BearerTokenAuthenticationFilter.class)
 
                 // Stateless API: answer 401/403 as JSON, never redirect to a login page.
                 .formLogin(form -> form.disable())
