@@ -1,0 +1,13 @@
+# Test configuration for every tier, layered over the real application.yml. One file
+# rather than per-class properties: the integration tier caches one context.
+spring:
+  kafka:
+    listener:
+      # No broker here. The consumer's decision is exercised by calling it directly.
+      auto-startup: false
+
+mugen:
+  outbox:
+    # Rows are still written — that is part of what the follow tests assert — only the
+    # draining is off, since there is nothing to drain to.
+    enabled: false

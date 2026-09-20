@@ -106,6 +106,9 @@ cannot disagree by forgetting to rename a class:
   using Spring Data Redis, and so on. Both halves are required so a service never boots
   a database it merely has a jar for. Override with
   `mugen.test.containers.<technology>.{enabled,image}`.
+- **Tokens for a resource server's tests come from `TokenSigner`** in mugen-test: a key pair
+  per run and a `@Primary` public key, opted into with `@Fixture class Tokens extends
+  TokenSigner` in `support/`. Never wired in by default — mugen-auth holds the real key.
 - **Container beans must be user configuration, not auto-configuration.** Tried and it
   silently fails: auto-configurations register after ordinary config, so
   `DataSourceAutoConfiguration` has already resolved the real `localhost` URL and Flyway

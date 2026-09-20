@@ -9,6 +9,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.data.jpa.autoconfigure.DataJpaRepositoriesAutoConfiguration;
 import org.springframework.boot.hibernate.autoconfigure.HibernateJpaAutoConfiguration;
+import org.springframework.boot.kafka.autoconfigure.KafkaAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.ImportBeanDefinitionRegistrar;
@@ -28,7 +29,12 @@ import tools.jackson.databind.json.JsonMapper;
  * replacing the service's own. An {@code @EntityScan} here would have done the opposite:
  * the first one anywhere switches the default off, and the service's entities vanish.
  */
-@AutoConfiguration(after = HibernateJpaAutoConfiguration.class, before = DataJpaRepositoriesAutoConfiguration.class)
+// After Kafka's as well as JPA's: @ConditionalOnBean on the poller is evaluated when this
+// class is processed, and without the ordering the KafkaTemplate does not exist yet —
+// the poller is then silently never created and the outbox fills with rows nobody sends.
+@AutoConfiguration(
+        after = {HibernateJpaAutoConfiguration.class, KafkaAutoConfiguration.class},
+        before = DataJpaRepositoriesAutoConfiguration.class)
 @ConditionalOnClass({KafkaTemplate.class, jakarta.persistence.EntityManager.class})
 @EnableConfigurationProperties(OutboxProperties.class)
 @EnableScheduling

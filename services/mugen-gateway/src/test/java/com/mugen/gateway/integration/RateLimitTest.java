@@ -1,7 +1,8 @@
 package com.mugen.gateway.integration;
 
 import com.mugen.gateway.support.TestRoutes;
-import com.mugen.gateway.support.TokenSigner;
+import com.mugen.test.TokenSigner;
+import com.mugen.gateway.support.Tokens;
 import com.mugen.shared.error.ErrorCode;
 import com.mugen.test.IntegrationTest;
 import org.junit.jupiter.api.Test;
@@ -28,7 +29,7 @@ class RateLimitTest {
     private static final String LIMITED = TestRoutes.LIMITED + "/resource";
 
     @Autowired private WebTestClient client;
-    @Autowired private TokenSigner tokens;
+    @Autowired private Tokens tokens;
     @Autowired private RedisRateLimiter redisRateLimiter;
 
     @Test

@@ -1,4 +1,4 @@
-package com.mugen.auth.token;
+package com.mugen.web.security;
 
 import org.springframework.security.oauth2.jwt.Jwt;
 

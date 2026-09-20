@@ -1,0 +1,171 @@
+# Default profile = development on the HOST (IntelliJ / ./mvnw spring-boot:run)
+# talking to the dockerized infra through published ports. Every value falls back
+# to a working localhost default; the MUGEN_* overrides come from .env Section B.
+#
+# The `docker` profile (application-docker.yml) is for when this service is itself
+# containerised — it swaps localhost for Docker network hostnames.
+
+server:
+  port: ${USER_SERVICE_PORT:8082}
+  shutdown: graceful
+  error:
+    include-stacktrace: never
+    include-message: never
+
+spring:
+  application:
+    name: mugen-user
+
+  config:
+    # Central configuration; `optional:` so the service starts on this file alone when
+    # config-server is down. See mugen-auth's application.yml for the full note.
+    import: "optional:configserver:${MUGEN_CONFIG_SERVER_URI:http://localhost:8888}"
+
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+
+  threads:
+    virtual:
+      enabled: true
+
+  datasource:
+    url: ${MUGEN_POSTGRES_USER_URL:jdbc:postgresql://localhost:5432/mugen_user}
+    username: ${MUGEN_POSTGRES_USER:mugen}
+    password: ${MUGEN_POSTGRES_PASSWORD:ChangeMe_Str0ng!}
+    hikari:
+      pool-name: mugen-user-pool
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 10000
+
+  jpa:
+    hibernate:
+      # Flyway owns the schema; validate makes drift a startup failure, not a runtime one.
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+
+  flyway:
+    enabled: true
+    # The service's own migrations, then the shared outbox table from the module that
+    # owns the entity mapped to it (V1000, so it sorts after ours).
+    locations: classpath:db/migration,classpath:db/outbox/postgresql
+
+  data:
+    redis:
+      host: ${MUGEN_REDIS_HOST:localhost}
+      port: ${MUGEN_REDIS_PORT:6379}
+      timeout: 2s
+
+  kafka:
+    bootstrap-servers: ${MUGEN_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: mugen-user
+      # From the beginning, once: a consumer group that starts after the first
+      # registrations would otherwise never create those profiles.
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      # Strings in, bound to mugen-shared's record by the consumer — see
+      # UserRegisteredConsumer for why not a JSON deserializer with type headers.
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    producer:
+      # Same reasoning as mugen-auth: the outbox publishes an already-serialized string.
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
+      properties:
+        enable.idempotence: true
+        max.block.ms: 5000
+      retries: 3
+
+  mvc:
+    problemdetails:
+      enabled: true
+
+  jackson:
+    default-property-inclusion: non_null
+    deserialization:
+      fail-on-unknown-properties: false
+
+springdoc:
+  api-docs:
+    enabled: ${MUGEN_API_DOCS_ENABLED:true}
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: ${MUGEN_SWAGGER_UI_ENABLED:true}
+    path: /swagger-ui.html
+    operations-sorter: alpha
+    tags-sorter: alpha
+  paths-to-match: /api/v1/users/**, /api/v2/users/**
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${MUGEN_EUREKA_URI:http://localhost:8761/eureka}
+    refresh:
+      # See mugen-auth's application.yml: a refreshed Eureka client re-registers blank.
+      enable: false
+  instance:
+    prefer-ip-address: true
+
+mugen:
+  jwt:
+    public-key: ${JWT_PUBLIC_KEY_PATH:classpath:keys/public.pem}
+    issuer: https://mugen.dev/auth
+
+  minio:
+    # The endpoint presigned URLs embed, so it has to be one the browser can reach —
+    # which from the host is the published port, not the compose hostname.
+    endpoint: ${MUGEN_MINIO_ENDPOINT:http://localhost:9000}
+    access-key: ${MUGEN_MINIO_ACCESS_KEY:mugen}
+    secret-key: ${MUGEN_MINIO_SECRET_KEY:ChangeMe_Str0ng!}
+
+  avatars:
+    bucket: ${MINIO_BUCKET_AVATARS:mugen-avatars}
+    upload-url-ttl: 10m
+    # URL valid 60 min, cached 50 min, so a cached URL can never be handed out after
+    # it has expired (CLAUDE.md, MinIO buckets).
+    url-ttl: ${MINIO_PRESIGNED_URL_TTL_MINUTES:60}m
+    url-cache-ttl: ${MINIO_PRESIGNED_URL_CACHE_TTL_MINUTES:50}m
+
+  outbox:
+    enabled: ${MUGEN_OUTBOX_ENABLED:true}
+    poll-interval: ${MUGEN_OUTBOX_POLL_INTERVAL:1s}
+    batch-size: ${MUGEN_OUTBOX_BATCH_SIZE:100}
+    send-timeout: ${MUGEN_OUTBOX_SEND_TIMEOUT:10s}
+    initial-backoff: ${MUGEN_OUTBOX_INITIAL_BACKOFF:2s}
+    max-backoff: ${MUGEN_OUTBOX_MAX_BACKOFF:5m}
+    alert-after-attempts: ${MUGEN_OUTBOX_ALERT_AFTER_ATTEMPTS:10}
+    retention: ${MUGEN_OUTBOX_RETENTION:7d}
+    purge-interval: ${MUGEN_OUTBOX_PURGE_INTERVAL:1h}
+
+management:
+  server:
+    # Own port, never published in a deployment; mugen-web refuses to start otherwise.
+    port: ${USER_SERVICE_MANAGEMENT_PORT:9082}
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,refresh
+  endpoint:
+    health:
+      show-details: when-authorized
+      probes:
+        enabled: true
+  opentelemetry:
+    tracing:
+      export:
+        otlp:
+          endpoint: ${MUGEN_OTLP_TRACING_ENDPOINT:http://localhost:4318/v1/traces}
+  tracing:
+    sampling:
+      probability: 1.0
+
+logging:
+  pattern:
+    correlation: "[%X{traceId:-}] "
+  level:
+    com.mugen.user: DEBUG

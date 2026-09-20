@@ -1,8 +1,7 @@
-package com.mugen.gateway.support;
+package com.mugen.test;
 
-import com.mugen.gateway.config.JwtProperties;
 import com.mugen.shared.auth.TokenType;
-import com.mugen.test.Fixture;
+import com.mugen.web.security.VerificationKeyProperties;
 import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
@@ -29,25 +28,30 @@ import java.util.UUID;
  * Stands in for mugen-auth: mints tokens the way that service does, from a key pair
  * generated for this run.
  * <p>
- * The gateway verifies against the {@code @Primary} public key below rather than the
- * committed one, because the matching private key must exist somewhere and a committed
- * private key — even a test one — is the habit this project refuses to form. A second
- * pair exists only to sign tokens the gateway must reject.
+ * The service under test verifies against the {@code @Primary} public key below rather
+ * than the committed one, because the matching private key must exist somewhere and a
+ * committed private key — even a test one — is the habit this project refuses to form.
+ * A second pair exists only to sign tokens that must be rejected.
+ * <p>
+ * Abstract, and opted into: a resource server declares {@code @Fixture class Tokens
+ * extends TokenSigner} in its {@code support/} package and the scan finds it. Not wired
+ * into {@link IntegrationTest}, because mugen-auth holds the real private key and a
+ * substituted public key there would break the very thing it tests.
  */
-@Fixture
-public class TokenSigner {
+
+public abstract class TokenSigner {
 
     private final KeyPair keys = rsa();
     private final KeyPair otherKeys = rsa();
     private final String issuer;
 
-    public TokenSigner(JwtProperties jwtProperties) {
-        this.issuer = jwtProperties.issuer();
+    protected TokenSigner(VerificationKeyProperties verificationKeyProperties) {
+        this.issuer = verificationKeyProperties.issuer();
     }
 
     @Bean
     @Primary
-    RSAPublicKey testVerificationKey() {
+    public RSAPublicKey testVerificationKey() {
         return (RSAPublicKey) keys.getPublic();
     }
 

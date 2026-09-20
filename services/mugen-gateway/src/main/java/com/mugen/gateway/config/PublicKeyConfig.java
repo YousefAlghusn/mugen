@@ -2,7 +2,9 @@ package com.mugen.gateway.config;
 
 import com.mugen.shared.auth.TokenType;
 import com.mugen.web.security.TokenTypeValidator;
+import com.mugen.web.security.VerificationKeyProperties;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.converter.RsaKeyConverters;
@@ -19,13 +21,16 @@ import java.security.interfaces.RSAPublicKey;
 /** Loads mugen-auth's public key once at startup and builds the decoder every request goes through. */
 @Slf4j
 @Configuration(proxyBeanMethods = false)
+// Bound here because mugen-web's resource-server auto-configuration, which normally
+// does it, is servlet-only; the record itself is stack-neutral.
+@EnableConfigurationProperties(VerificationKeyProperties.class)
 public class PublicKeyConfig {
 
     @Bean
-    RSAPublicKey jwtVerificationKey(JwtProperties jwtProperties) throws IOException {
-        try (InputStream pem = jwtProperties.publicKey().getInputStream()) {
+    RSAPublicKey jwtVerificationKey(VerificationKeyProperties verificationKeyProperties) throws IOException {
+        try (InputStream pem = verificationKeyProperties.publicKey().getInputStream()) {
             RSAPublicKey key = RsaKeyConverters.x509().convert(pem);
-            log.info("Loaded RS256 verification key from {}", jwtProperties.publicKey().getDescription());
+            log.info("Loaded RS256 verification key from {}", verificationKeyProperties.publicKey().getDescription());
             return key;
         }
     }
@@ -36,11 +41,11 @@ public class PublicKeyConfig {
      * claim — without which a 30-day refresh token would pass as a bearer credential.
      */
     @Bean
-    ReactiveJwtDecoder accessTokenDecoder(RSAPublicKey jwtVerificationKey, JwtProperties jwtProperties) {
+    ReactiveJwtDecoder accessTokenDecoder(RSAPublicKey jwtVerificationKey, VerificationKeyProperties verificationKeyProperties) {
         NimbusReactiveJwtDecoder decoder = NimbusReactiveJwtDecoder.withPublicKey(jwtVerificationKey).build();
         decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(
                 new JwtTimestampValidator(),
-                new JwtIssuerValidator(jwtProperties.issuer()),
+                new JwtIssuerValidator(verificationKeyProperties.issuer()),
                 new TokenTypeValidator(TokenType.ACCESS)));
         return decoder;
     }

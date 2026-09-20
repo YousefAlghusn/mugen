@@ -651,40 +651,66 @@ application.yml files and restarting each.
 ## PHASE 4 — User Service
 
 ### 4.1 mugen-user setup
-- [ ] Maven module + dependencies (Postgres, Flyway, MinIO SDK, Resilience4j)
-- [ ] application.yml + application-docker.yml
+- [x] Maven module + dependencies (Postgres, Flyway, MinIO SDK, Resilience4j) — no
+      Resilience4j: this service calls no other service over HTTP, so there is nothing
+      to wrap; it arrives with the first enrichment call, not before
+- [x] application.yml + application-docker.yml — plus `config-repo/mugen-user.yml`,
+      management port 9082, and the shared outbox table via a second Flyway location
 
 ### 4.2 Database layer
-- [ ] V1__create_user_profiles.sql
-- [ ] V2__create_follows.sql (composite unique index on followerId+followeeId)
-- [ ] V3__add_follower_counts.sql
-- [ ] UserProfile entity + UserProfileRepository
-- [ ] Follow entity + FollowRepository (cursor pagination query)
+- [x] V1__create_user_profiles.sql
+- [x] V2__create_follows.sql (composite unique index on followerId+followeeId) — the
+      pair is the primary key; a check constraint refuses a self-follow at the table
+- [x] V3__add_follower_counts.sql — maintained by SQL increments in the follow's
+      transaction, never read-modify-write through the entity
+- [x] UserProfile entity + UserProfileRepository — `Persistable`, since the id is
+      mugen-auth's and never null
+- [x] Follow entity + FollowRepository (cursor pagination query) — keyset on
+      `(created_at, id)` descending, an index range scan on both lists
 
 ### 4.3 Services
-- [ ] UserService (getUser, updateProfile)
-- [ ] FollowService (follow, unfollow, getFollowers, getFollowing — cursor pagination)
-- [ ] AvatarService (presigned PUT URL, confirm upload, presigned GET URL + Redis cache)
+- [x] UserService (getUser, updateProfile) — and `createFromRegistration`, idempotent
+      on the primary key
+- [x] FollowService (follow, unfollow, getFollowers, getFollowing — cursor pagination) —
+      the duplicate is decided by the primary key inside the transaction, not by a read
+- [x] AvatarService (presigned PUT URL, confirm upload, presigned GET URL + Redis cache) —
+      the key is `<userId>/<random>.<ext>`, so ownership is the prefix and confirm can
+      refuse a key it never issued to that caller
 
 ### 4.4 MinIO + exception handling
-- [ ] MinioClientWrapper (generatePresignedPut, generatePresignedGet, objectExists, delete)
-- [ ] Exception hierarchy (copy + extend from reference repo)
-- [ ] GlobalExceptionHandler (RFC 9457)
+- [x] MinioClientWrapper (generatePresignedPut, generatePresignedGet, objectExists, delete)
+- [x] Exception hierarchy (copy + extend from reference repo) — `UserExceptions`, on
+      mugen-web's base classes
+- [x] GlobalExceptionHandler (RFC 9457) — mugen-web's, by auto-configuration; nothing
+      to write
 
 ### 4.5 Controllers
-- [ ] UserControllerV1 (/api/v1/users/**)
-- [ ] UserControllerV2 (/api/v2/users/**) — same service, extended DTO
-- [ ] AvatarController (/avatar request URL, /avatar/confirm)
+- [x] UserControllerV1 (/api/v1/users/**)
+- [x] UserControllerV2 (/api/v2/users/**) — same service, extended DTO
+- [x] AvatarController (/avatar request URL, /avatar/confirm)
 
 ### 4.6 Kafka
-- [ ] UserRegisteredConsumer (mugen.user.registered → create UserProfile)
-- [ ] UserEventPublisher (publish mugen.user.followed)
+- [x] UserRegisteredConsumer (mugen.user.registered → create UserProfile) — binds the
+      producer's string to the shared record by name, no type header
+- [x] UserEventPublisher (publish mugen.user.followed) — `FollowEventPublisher`, one line
+      over the shared outbox
 
 ### 4.7 Tests
-- [ ] UserServiceTest
-- [ ] FollowServiceTest (follow, unfollow, duplicate follow, cursor pagination)
-- [ ] UserRegisteredConsumerTest (idempotency)
-- [ ] UserControllerV1IntegrationTest (Testcontainers Postgres)
+- [x] UserServiceTest — folded into the flows below; the service has no decision a
+      mock could see that the database does not decide
+- [x] FollowServiceTest (follow, unfollow, duplicate follow, cursor pagination) —
+      `integration/FollowFlowTest`, through HTTP with minted tokens; the keyset walk
+      asserts no gaps and no repeats across three pages
+- [x] UserRegisteredConsumerTest (idempotency) — `integration/UserRegisteredConsumerTest`
+- [x] UserControllerV1IntegrationTest (Testcontainers Postgres) —
+      `integration/ResourceServerTest` (the shared chain, both directions, and the
+      document), `integration/AvatarFlowTest` against a real MinIO (the browser's PUT
+      included), `unit/CursorTest`. 4 unit + 24 integration
+
+**Run for real 2026-09-20**: registration through the gateway → event → profile;
+follow → counts on v2 → `mugen.user.followed` on the broker; the avatar flow with curl
+playing the browser. The real run found the one bug the suite could not: the outbox
+poller had silently never been created in this service — see context.md.
 
 ---
 

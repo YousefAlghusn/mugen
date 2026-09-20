@@ -7,7 +7,9 @@ import org.springframework.boot.testcontainers.service.connection.ServiceConnect
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
+import org.springframework.test.context.DynamicPropertyRegistrar;
 import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.MinIOContainer;
 import org.testcontainers.containers.MSSQLServerContainer;
 import org.testcontainers.containers.MongoDBContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -82,6 +84,33 @@ public class MugenContainers {
         @SuppressWarnings("resource")
         MongoDBContainer mongoContainer(Environment environment) {
             return new MongoDBContainer(image(environment, "mongo", "mongo:7"));
+        }
+    }
+
+    /**
+     * Keyed off the MinIO SDK and the Testcontainers module, like the databases. There
+     * is no {@code @ServiceConnection} for MinIO, so the endpoint and credentials are
+     * contributed as {@code mugen.minio.*} — the property names every MinIO-backed
+     * service binds, which is what makes this one block serve all of them.
+     */
+    @Configuration(proxyBeanMethods = false)
+    @ConditionalOnClass(value = MinIOContainer.class, name = "io.minio.MinioClient")
+    @ConditionalOnProperty(name = "mugen.test.containers.minio.enabled", matchIfMissing = true)
+    static class Minio {
+
+        @Bean
+        @SuppressWarnings("resource")
+        MinIOContainer minioContainer(Environment environment) {
+            return new MinIOContainer(image(environment, "minio", "minio/minio:RELEASE.2024-10-13T13-34-11Z"));
+        }
+
+        @Bean
+        DynamicPropertyRegistrar minioProperties(MinIOContainer minio) {
+            return registry -> {
+                registry.add("mugen.minio.endpoint", minio::getS3URL);
+                registry.add("mugen.minio.access-key", minio::getUserName);
+                registry.add("mugen.minio.secret-key", minio::getPassword);
+            };
         }
     }
 

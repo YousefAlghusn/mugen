@@ -4,7 +4,8 @@ import com.mugen.gateway.config.GatewayProperties;
 import com.mugen.gateway.filter.IdentityHeadersFilter;
 import com.mugen.gateway.filter.TraceIdFilter;
 import com.mugen.gateway.support.TestRoutes;
-import com.mugen.gateway.support.TokenSigner;
+import com.mugen.test.TokenSigner;
+import com.mugen.gateway.support.Tokens;
 import com.mugen.shared.error.ErrorCode;
 import com.mugen.test.IntegrationTest;
 import org.junit.jupiter.api.Test;
@@ -28,7 +29,7 @@ class JwtVerificationTest {
     private static final String ECHO = TestRoutes.UPSTREAM + "/echo";
 
     @Autowired private WebTestClient client;
-    @Autowired private TokenSigner tokens;
+    @Autowired private Tokens tokens;
     @Autowired private ReactiveStringRedisTemplate redis;
     @Autowired private GatewayProperties gatewayProperties;
 

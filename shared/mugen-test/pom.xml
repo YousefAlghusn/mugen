@@ -82,6 +82,11 @@
             <artifactId>mongodb</artifactId>
             <optional>true</optional>
         </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>minio</artifactId>
+            <optional>true</optional>
+        </dependency>
 
         <!--
             Needed to compile the web and security pieces, optional for the same

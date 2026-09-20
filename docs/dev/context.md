@@ -4,6 +4,65 @@ Companion to tasks.md, which is the checklist. This file holds only what the cod
 and git history do NOT already say: live status, decisions and their reasoning,
 and traps worth not rediscovering.
 
+## Status (2026-09-20, evening) — Phase 4, mugen-user, done
+**The first plain resource server, on Postgres, and the shared pieces it forced out.**
+`./mvnw verify` green across eight modules: mugen-outbox 23 + 15, auth 80 + 53, gateway
+3 + 21, user 4 + 24. Run for real through the gateway: register → `mugen.user.registered`
+→ profile; follow → counts → `mugen.user.followed` on the broker; the avatar flow with
+curl as the browser, PUT straight to MinIO on the presigned URL, confirm, GET back.
+
+What moved to shared, because a second service needed it:
+
+- **`shared/mugen-outbox`** — the transactional outbox as a JPA module. Entity,
+  repository, poller, properties and `Outbox.record(topic, key, event)` with `MANDATORY`
+  propagation; auto-configured. The native SQL Server claim query became JPQL with
+  `PESSIMISTIC_WRITE` and lock timeout `-2` (Hibernate's skip-locked), which the dialect
+  renders for both databases; the module tests its table against Postgres including the
+  lock seen from a second transaction, and ships the Postgres DDL under
+  `db/outbox/postgresql` as `V1000` for a service to add to its Flyway locations. Its
+  package is registered as an *auto-configuration package* so JPA and Spring Data scan it
+  beside the service's — an `@EntityScan` would switch the service's own off.
+- **`MugenResourceServerAutoConfiguration`** in mugen-web: key, decoder with the three
+  checks, roles-to-authorities, and `ResourceServerSecurity.configure(http)` — the
+  standard chain a service builds from. mugen-user's `SecurityConfig` is three lines;
+  mugen-auth's is the chain plus its revocation filter. `CurrentUser` moved here too.
+- **`TokenSigner`** in mugen-test, opted into per service with `@Fixture class Tokens
+  extends TokenSigner`; a MinIO container in `MugenContainers`, keyed on the SDK and
+  contributing `mugen.minio.*`; `CursorPage<T>` in mugen-shared as the list contract.
+
+The bug only the real run found, and it is a trap for every module with a conditional
+bean: **the outbox poller was never created in mugen-user.** `@ConditionalOnBean
+(KafkaTemplate)` is evaluated when the auto-configuration is processed, and without
+`after = KafkaAutoConfiguration.class` the template did not exist yet. No error, no
+warning; follows queued, nothing sent. It worked in mugen-auth by accident of ordering.
+Pinned by `OutboxAutoConfigurationTest` on an `ApplicationContextRunner`, which fails
+without the `after` and passes with it.
+
+Design points worth keeping:
+
+- **Keyset pagination at full precision.** The cursor is `(createdAt, id)`, base64url of
+  the ISO instant and the UUID. Epoch millis would have skipped every row in the same
+  millisecond as the one the cursor names, since the column holds microseconds.
+- **The follow's duplicate is the primary key, not a read.** `saveAndFlush` inside a
+  `try`, the violation becomes the 409, the transaction rolls back before the counters
+  are touched. The follower's own profile is checked first so a token whose profile has
+  not arrived is a 404, not a foreign-key failure reported as a conflict.
+- **Idempotent consumer, but the race loser must not catch.** After a failed flush the
+  persistence context cannot commit; the `DataIntegrityViolationException` escapes the
+  transactional method and the consumer treats it as the duplicate it is.
+- **Avatars never pass through the service.** A presigned PUT bound to one key and one
+  content type (MinIO answers 403 to any other), confirm checks the object exists, the
+  old object is deleted after the row is written. The GET URL is cached 50 of its 60
+  minutes. In a deployment the signing endpoint has to be the *public* MinIO address,
+  since the browser uses the same URL — `MUGEN_MINIO_PUBLIC_ENDPOINT`, deliberately with
+  no default.
+
+### What to do next, in order
+1. **Phase 5, mugen-post** — MongoDB, GraphQL, and the outbox again, this time without
+   JPA: mugen-outbox is JPA-only, so post needs its own Mongo-backed one (or the module
+   grows a second store; decide when the shape is in front of you).
+2. Everything still deliberately open: 2.12, `http/auth.http`, Loki.
+
 ## Status (2026-09-20, later) — Phase 3.5, Config Server, done
 **config-server runs as infra in compose, and both services pull from it.** Standalone
 module like eureka-server; `config-repo/` mounted read-only into the container under the

@@ -1,0 +1,21 @@
+# mugen-user's tunables. Bucket names and cookie-like contracts stay in the service.
+
+mugen:
+  avatars:
+    upload-url-ttl: ${MUGEN_AVATAR_UPLOAD_URL_TTL:10m}
+    url-ttl: ${MINIO_PRESIGNED_URL_TTL_MINUTES:60}m
+    url-cache-ttl: ${MINIO_PRESIGNED_URL_CACHE_TTL_MINUTES:50}m
+
+  outbox:
+    poll-interval: ${MUGEN_OUTBOX_POLL_INTERVAL:1s}
+    batch-size: ${MUGEN_OUTBOX_BATCH_SIZE:100}
+    send-timeout: ${MUGEN_OUTBOX_SEND_TIMEOUT:10s}
+    initial-backoff: ${MUGEN_OUTBOX_INITIAL_BACKOFF:2s}
+    max-backoff: ${MUGEN_OUTBOX_MAX_BACKOFF:5m}
+    alert-after-attempts: ${MUGEN_OUTBOX_ALERT_AFTER_ATTEMPTS:10}
+    retention: ${MUGEN_OUTBOX_RETENTION:7d}
+    purge-interval: ${MUGEN_OUTBOX_PURGE_INTERVAL:1h}
+
+logging:
+  level:
+    com.mugen.user: DEBUG
