@@ -103,8 +103,9 @@ cannot disagree by forgetting to rename a class:
   exists to delete.
 - **Containers follow the classpath.** `MugenContainers` starts SQL Server for a service
   depending on `org.testcontainers:mssqlserver` *and* the JDBC driver, Redis for one
-  using Spring Data Redis, and so on. Both halves are required so a service never boots
-  a database it merely has a jar for. Override with
+  using Spring Data Redis, MinIO for one with the SDK and `org.testcontainers:minio`
+  (contributing `mugen.minio.*`), and so on. Both halves are required so a service
+  never boots a database it merely has a jar for. Override with
   `mugen.test.containers.<technology>.{enabled,image}`.
 - **Tokens for a resource server's tests come from `TokenSigner`** in mugen-test: a key pair
   per run and a `@Primary` public key, opted into with `@Fixture class Tokens extends
