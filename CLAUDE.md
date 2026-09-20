@@ -263,7 +263,9 @@ holds for every endpoint mugen will ever have, including the ones nobody has wri
 - Single GlobalExceptionHandler per service
 - RFC 9457 ProblemDetail with custom fields: traceId (always), errors[] (validation)
 - Content-Type: application/problem+json
-- spring.mvc.problemdetails.enabled: true in every service
+- spring.mvc.problemdetails.enabled: true in every service — except the gateway, whose
+  reactive `GatewayExceptionHandler` is the one renderer; Boot's WebFlux advice would
+  claim the 404s first (context.md, "Boot 4 traps")
 - Never expose raw exception messages to clients
 
 ## API docs (OpenAPI / Swagger)

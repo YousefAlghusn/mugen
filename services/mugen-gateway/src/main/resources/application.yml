@@ -1,0 +1,230 @@
+# Default profile = development on the HOST (IntelliJ / ./mvnw spring-boot:run),
+# reaching the dockerized infra through published ports and the other services on
+# their host ports via Eureka. Every value falls back to a working localhost default.
+#
+# The `docker` profile (application-docker.yml) is for when the gateway is itself
+# containerised for deployment — it swaps localhost for Docker network hostnames.
+
+server:
+  port: ${GATEWAY_PORT:8080}
+  shutdown: graceful
+
+spring:
+  application:
+    name: mugen-gateway
+
+  main:
+    # Stated rather than deduced. The shared test library puts Spring MVC classes on the
+    # test classpath, and Spring Cloud Gateway refuses to start in a servlet context.
+    web-application-type: reactive
+
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+
+  data:
+    redis:
+      host: ${MUGEN_REDIS_HOST:localhost}
+      port: ${MUGEN_REDIS_PORT:6379}
+      timeout: 2s
+
+  webflux:
+    problemdetails:
+      # Off, unlike every other service. Boot's handler is a @ControllerAdvice that
+      # also claims dispatch errors — the 404 for a path no route serves — and
+      # renders a bare ProblemDetail with no code and no traceId, ahead of
+      # GatewayExceptionHandler, which is the one renderer here.
+      enabled: false
+
+  cloud:
+    gateway:
+      server:
+        webflux:
+          # Explicit routes only. The discovery locator would expose every registered
+          # service under /<service-id>/**, a second URL contract nobody designed.
+          discovery:
+            locator:
+              enabled: false
+
+          httpclient:
+            connect-timeout: 2000
+            response-timeout: 10s
+
+          # The gateway is the one browser-facing origin, so CORS is answered here and
+          # nowhere else. Credentials are on for the refresh cookie, which is why the
+          # origin has to be explicit — a wildcard is forbidden with credentials.
+          globalcors:
+            cors-configurations:
+              '[/**]':
+                allowed-origins: ${MUGEN_CORS_ALLOWED_ORIGINS:http://localhost:4200}
+                allowed-methods: [GET, POST, PUT, PATCH, DELETE, OPTIONS]
+                allowed-headers: "*"
+                exposed-headers: [X-Trace-Id]
+                allow-credentials: true
+                max-age: 3600
+
+          # Token buckets per route id, read by RateLimitFilter. `defaultFilters` is
+          # Spring Cloud's name for the fallback entry and covers any route without its
+          # own, so adding a route never adds an unlimited one. Units: tokens per second
+          # and bucket size, per caller (user id, or address when anonymous).
+          redis-rate-limiter:
+            config:
+              defaultFilters:
+                replenish-rate: ${MUGEN_RATE_LIMIT_DEFAULT_RATE:20}
+                burst-capacity: ${MUGEN_RATE_LIMIT_DEFAULT_BURST:40}
+              # Credential endpoints are the ones worth brute-forcing, and always
+              # anonymous, so this is per address.
+              auth-credentials:
+                replenish-rate: ${MUGEN_RATE_LIMIT_CREDENTIALS_RATE:1}
+                burst-capacity: ${MUGEN_RATE_LIMIT_CREDENTIALS_BURST:5}
+
+          # Paths are forwarded unchanged. In particular /api/v1/auth must stay as it
+          # is: the refresh cookie is scoped to that path and the browser will not send
+          # it anywhere else.
+          #
+          # A route to a service that is not registered yet answers 503 through the
+          # fallback, which is the correct answer for "built, not started".
+          routes:
+            - id: auth-credentials
+              uri: lb://mugen-auth
+              order: -1
+              predicates:
+                - Path=/api/v1/auth/login,/api/v1/auth/register
+                - Method=POST
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    name: mugen-auth
+                    fallbackUri: forward:/fallback/mugen-auth
+            - id: auth
+              uri: lb://mugen-auth
+              predicates:
+                - Path=/api/v1/auth/**
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    name: mugen-auth
+                    fallbackUri: forward:/fallback/mugen-auth
+            - id: user
+              uri: lb://mugen-user
+              predicates:
+                - Path=/api/v1/users/**,/api/v2/users/**
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    name: mugen-user
+                    fallbackUri: forward:/fallback/mugen-user
+            - id: post
+              uri: lb://mugen-post
+              predicates:
+                - Path=/graphql,/api/v1/posts/**
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    name: mugen-post
+                    fallbackUri: forward:/fallback/mugen-post
+            - id: feed
+              uri: lb://mugen-feed
+              predicates:
+                - Path=/api/v1/feed/**
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    name: mugen-feed
+                    fallbackUri: forward:/fallback/mugen-feed
+            - id: notification
+              uri: lb://mugen-notification
+              predicates:
+                - Path=/api/v1/notifications/**
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    name: mugen-notification
+                    fallbackUri: forward:/fallback/mugen-notification
+            # WebSocket upgrade for the notification stream. lb:ws:// so the load
+            # balancer resolves the instance and the scheme stays ws.
+            - id: notification-ws
+              uri: lb:ws://mugen-notification
+              predicates:
+                - Path=/ws/**
+            - id: payment
+              uri: lb://mugen-payment
+              predicates:
+                - Path=/api/v1/payments/**
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    name: mugen-payment
+                    fallbackUri: forward:/fallback/mugen-payment
+            - id: video
+              uri: lb://mugen-video
+              predicates:
+                - Path=/api/v1/videos/**
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    name: mugen-video
+                    fallbackUri: forward:/fallback/mugen-video
+            - id: search
+              uri: lb://mugen-search
+              predicates:
+                - Path=/api/v1/search/**
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    name: mugen-search
+                    fallbackUri: forward:/fallback/mugen-search
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${MUGEN_EUREKA_URI:http://localhost:8761/eureka}
+  instance:
+    prefer-ip-address: true
+
+mugen:
+  gateway:
+    # Must match RevocationCacheService.KEY_PREFIX in mugen-auth. Two services, one
+    # key — this is the whole revocation channel.
+    revocation-key-prefix: "mugen:auth:revoked-session:"
+    circuit-breaker:
+      # Longer than any healthy call, shorter than a client will wait. A login is the
+      # slowest thing behind this gateway and takes well under a second.
+      timeout: ${MUGEN_CIRCUIT_BREAKER_TIMEOUT:5s}
+
+  jwt:
+    public-key: ${JWT_PUBLIC_KEY_PATH:classpath:keys/public.pem}
+    # Verbatim from mugen-auth's application.yml; a mismatch refuses every token.
+    issuer: https://mugen.dev/auth
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,gateway
+  endpoint:
+    health:
+      probes:
+        enabled: true
+    # Lists the live routes at /actuator/gateway/routes — the fastest way to confirm
+    # what this instance is actually serving. Read-only surface, dev only (see the
+    # docker profile).
+    gateway:
+      access: unrestricted
+  opentelemetry:
+    tracing:
+      export:
+        otlp:
+          # Boot 4's key. The Boot 3 `management.otlp.tracing.endpoint` binds nothing
+          # here — see mugen-auth's application.yml for the full note.
+          endpoint: ${MUGEN_OTLP_TRACING_ENDPOINT:http://localhost:4318/v1/traces}
+  tracing:
+    sampling:
+      probability: 1.0
+
+logging:
+  pattern:
+    correlation: "[%X{traceId:-}] "
+  level:
+    com.mugen.gateway: DEBUG
+    # Uncomment to see each route decision and the resolved downstream URL.
+    # org.springframework.cloud.gateway: DEBUG

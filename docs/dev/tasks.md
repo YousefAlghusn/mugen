@@ -510,37 +510,80 @@ judgement. Then apply it here, and let the number of tests fall if it falls.
 ## PHASE 3 — API Gateway
 
 ### 3.1 mugen-gateway setup
-- [ ] Maven module (Spring Cloud Gateway + WebFlux)
-- [ ] Copy public.pem from auth-service
-- [ ] application.yml + application-docker.yml
+- [x] Maven module (Spring Cloud Gateway + WebFlux) — `spring-cloud-starter-gateway-server-webflux`,
+      Gateway 5.0.x under the 2025.1 train; property prefix is
+      `spring.cloud.gateway.server.webflux.*`, the bare `spring.cloud.gateway.*` is gone
+- [x] Copy public.pem from auth-service
+- [x] application.yml + application-docker.yml
 
 ### 3.2 Config
-- [ ] PublicKeyConfig (load RSAPublicKey bean from public.pem)
-- [ ] RouteConfig (all service routes defined)
-- [ ] SecurityConfig — **no public-vs-protected route list.** Decided 2026-08-03: the
+- [x] PublicKeyConfig (load RSAPublicKey bean from public.pem) — plus the
+      `ReactiveJwtDecoder` with the same three validators mugen-auth applies: timestamps,
+      issuer, `type=access`. `TokenType` moved to mugen-shared and `TokenTypeValidator`
+      to mugen-web so the contract has one definition
+- [x] RouteConfig (all service routes defined) — in `application.yml`, not Java: it is
+      the shape Config Server (3.5) will manage, and a route is configuration. Every
+      route carries its own `CircuitBreaker` with a `forward:/fallback/<service>`
+- [x] SecurityConfig — **no public-vs-protected route list.** Decided 2026-08-03: the
       gateway authenticates (verify RS256, check Redis revocation, reject a bad token)
       and the service authorizes. "Is this endpoint public?" is an authorization
       question, answered only by `@PublicEndpoint` in the service. A request with no
       token is forwarded with no identity and the service's default-deny refuses it.
       See context.md, "Authn vs authz" — including why a `/public-api` URL convention
       was considered and rejected.
-- [ ] Strip client-supplied identity headers (`X-User-*`) on the way in, so a caller
-      cannot forge one
-- [ ] RateLimitConfig (token bucket config per route)
+- [x] Strip client-supplied identity headers (`X-User-*`) on the way in, so a caller
+      cannot forge one — `IdentityHeadersFilter`, by prefix; it then sets `X-User-Id` and
+      `X-User-Session-Id` from the verified token. Informational only: no service
+      authorizes on them, each re-verifies the bearer token it also receives
+- [x] RateLimitConfig (token bucket config per route) — Spring Cloud's own
+      `redis-rate-limiter.config.<routeId>` map in `application.yml`, with `defaultFilters`
+      as the entry every unlisted route falls back to, so no route is ever unlimited
 
 ### 3.3 Filters (order matters)
-- [ ] TraceIdFilter (runs first — always, even on rejected requests)
-- [ ] JwtVerificationFilter (verify RS256 + Redis revocation check)
-- [ ] RateLimitFilter (per userId + per IP, strict on /auth/login)
-- [ ] RequestLoggingFilter (structured JSON log with traceId + userId)
+- [x] TraceIdFilter (runs first — always, even on rejected requests) — reads the tracer's
+      id from the server observation WebFlux starts around the whole chain, mints one only
+      when nothing is tracing, and answers every response with `X-Trace-Id`
+- [x] JwtVerificationFilter (verify RS256 + Redis revocation check) — not a hand-written
+      filter: Spring Security's reactive resource server verifies, and `RevokedSessionFilter`
+      makes the one Redis lookup after it, same key mugen-auth writes and checks
+- [x] RateLimitFilter (per userId + per IP, strict on /auth/login) — a `GlobalFilter` over
+      the auto-configured `RedisRateLimiter`, because the built-in route filter answers a
+      bare 429 and every refusal here is a problem document. Key is `user:<id>` when
+      signed in, else `ip:<socket address>` — never `X-Forwarded-For`. The strict bucket
+      covers login *and* register via the `auth-credentials` route
+- [x] RequestLoggingFilter (structured JSON log with traceId + userId) — one line on
+      response commit, so it has the final status on every path; ECS JSON in the `docker`
+      profile via `logging.structured.format.console`, the readable pattern in dev
 
 ### 3.4 Fallback
-- [ ] FallbackController (circuit breaker fallback — RFC 9457 response)
-- [ ] GlobalExceptionHandler (filter-level exceptions)
+- [x] FallbackController (circuit breaker fallback — RFC 9457 response) — throws
+      `ServiceUnavailable` (new `ErrorCode.SERVICE_UNAVAILABLE`) so one handler renders it
+- [x] GlobalExceptionHandler (filter-level exceptions) — `GatewayExceptionHandler`, an
+      `ErrorWebExceptionHandler` at order -2. mugen-web's handler is servlet-only, so this is
+      its reactive twin; the status-to-code mapping moved into `ApiErrors.codeFor` so both
+      read one table
 
 ### 3.5 Tests
-- [ ] JwtVerificationFilterTest (valid, expired, tampered, revoked)
-- [ ] RateLimitFilterTest (under limit, at limit, exceeded)
+- [x] JwtVerificationFilterTest (valid, expired, tampered, revoked) —
+      `integration/JwtVerificationTest`, twelve cases: both directions of every refusal, the
+      identity headers stripped and replaced, a refresh token as bearer, a verified token
+      with no session. Tokens are minted by `support/TokenSigner` from a key pair generated
+      per run, with a `@Primary` public key — no test private key is committed
+- [x] RateLimitFilterTest (under limit, at limit, exceeded) — `integration/RateLimitTest`,
+      plus `unit/RateLimitKeysTest` for the key decision and
+      `integration/ProblemContractTest` for the problem shape, the trace id header, and the
+      invariant that every rate-limit entry names a route that exists
+- The integration tier runs against Redis from `MugenContainers` and an in-process
+  Reactor Netty stub (`support/UpstreamStub`) that echoes what the gateway forwarded.
+  `mugen-test` gained a `WebTestClient` for reactive services, wired the way `MockMvc` is
+
+**Run for real 2026-09-20**, the same bar as the 2.11 gate: infra up, both services on the
+host, every path through `:8080` — register, login, `/me`, revoke-then-refuse (401
+`TOKEN_REVOKED` from the gateway), seven logins ending in 429, 404, and 503 through the
+fallback for a service that is not running. One `X-Trace-Id` found in Jaeger with both
+services in it — which is how the OTLP property trap was found: neither service had ever
+exported a span. `Dockerfile` + ignore file built and run against the compose stack.
+Details and the two Boot 4 traps in context.md, "Status (2026-09-20)".
 
 ---
 

@@ -4,6 +4,90 @@ Companion to tasks.md, which is the checklist. This file holds only what the cod
 and git history do NOT already say: live status, decisions and their reasoning,
 and traps worth not rediscovering.
 
+## Status (2026-09-20) — Phase 3, the gateway, is built and run
+**mugen-gateway exists, and the whole of Phase 3 is ticked.** `./mvnw verify` green across
+the reactor: 106 unit + slice and 59 integration in auth, 3 + 21 in the gateway. Then run for
+real: infra up, mugen-auth and mugen-gateway on the host, and every path exercised through
+`:8080` — register, login, `/me`, a session revoked through the gateway and the same
+still-valid token refused by the gateway 401 `TOKEN_REVOKED`, seven quick logins ending in a
+429, an unknown path 404, and `/api/v1/users/me` answering 503 through the fallback because
+nothing is registered as mugen-user yet. One trace id from `X-Trace-Id` found in Jaeger with
+both services in it. The feat/auth-core branch was merged to main first; this is
+`feat/gateway`.
+
+What is worth knowing beyond the checklist:
+
+- **Gateway 5.0.x, WebFlux.** The 2025.1 train's gateway; the property prefix is
+  `spring.cloud.gateway.server.webflux.*` and the old one is gone. It is reactive, so
+  mugen-web's servlet pieces stay dormant (they are `@ConditionalOnWebApplication(SERVLET)`)
+  and the gateway has its own `GatewayExceptionHandler`, an `ErrorWebExceptionHandler` at
+  order -2 rendering the same document. The status-to-code table moved to
+  `ApiErrors.codeFor` so both handlers read one.
+- **`spring.webflux.problemdetails.enabled: false`, unlike every other service.** Boot's
+  handler is a `@ControllerAdvice` that also claims dispatch errors — the 404 for a path no
+  route serves — and rendered a bare document with no `code` and no `traceId` ahead of ours.
+  Found by `ProblemContractTest` on the first run.
+- **Three things moved to shared, because two services now make the same decision:**
+  `TokenType` (the `type` claim contract) to mugen-shared beside `JwtClaims`;
+  `TokenTypeValidator` to mugen-web; `TokenRevokedException` to mugen-web, replacing
+  mugen-auth's own. `ErrorCode` gained `SERVICE_UNAVAILABLE`.
+- **The trace id comes from the observation, not MDC.** WebFlux starts the server
+  observation around the whole filter chain (in `HttpWebHandlerAdapter`, not a filter), so
+  `TraceIdFilter` reads the span from `ServerRequestObservationContext` inside `Mono.defer`
+  — at assembly time the observation is not started yet. MDC is not a safe read on an event
+  loop, which is why `TraceIdHolder.mint()` is now public and the gateway never calls
+  `resolve()`. Every log line in the gateway carries `traceId={}` explicitly for the same
+  reason; the `[%X{traceId}]` correlation field is empty on those threads.
+- **Boot 4 trap, and it bit both services: `management.otlp.tracing.endpoint` binds
+  nothing.** Deprecated at level *error* since 4.0 — the replacement is
+  `management.opentelemetry.tracing.export.otlp.endpoint`. Neither service had ever exported
+  a span; Jaeger listed only itself. Fixed in all four yml files. Found because the gateway
+  run was the first time anyone looked for a trace by id.
+- **Testing a reactive service under the shared tiers.** `@IntegrationTest` boots a MOCK
+  reactive context, and Spring Cloud Gateway proxies from it fine: `WebTestClient` bound to
+  the context runs the real `WebFilter` chain (security included), and the routing filter
+  makes a real HTTP call to `support/UpstreamStub`, a Reactor Netty server echoing what it
+  received. Test routes come from a `RouteLocator` bean in `support/TestRoutes`, not from
+  `application-test.yml`: a yaml list is replaced by a profile file, not extended. Tokens are
+  minted by `support/TokenSigner` from a key pair generated per run, with a `@Primary`
+  public key — no test private key is committed. mugen-test gained
+  `WebTestClientConfiguration` (reactive twin of `MockMvcConfiguration`) and an optional
+  webflux dependency; `spring.main.web-application-type: reactive` is stated in the
+  gateway's yml because mugen-test puts Spring MVC classes on the test classpath.
+- **Rate limiting is Spring Cloud's `RedisRateLimiter` behind our own `GlobalFilter`,**
+  because the built-in route filter answers a bare 429. Buckets are the limiter's own
+  `redis-rate-limiter.config.<routeId>` map; `defaultFilters` is its fallback key, and
+  deleting it makes the limiter *throw* for every unlisted route — `RateLimitTest` pins
+  that. The key is `user:<id>` or `ip:<socket address>`, never `X-Forwarded-For`, and the
+  strict bucket covers `/login` and `/register` through the `auth-credentials` route.
+- **Logout without the refresh cookie is a no-op**, by mugen-auth's design — it clears the
+  cookie and revokes the session the cookie names. Worth knowing before concluding the
+  gateway missed a revocation: `DELETE /sessions/{id}` with the bearer is the way to revoke
+  from a client that has no cookie.
+
+### Resuming
+1. Start Docker Desktop; `docker info` answering is the check. `docker compose up -d`.
+2. `cd services/mugen-auth && ../../mvnw spring-boot:run`, and the same in
+   `services/mugen-gateway`. The gateway is `:8080`; everything in `http/auth.http` works
+   through it unchanged, since paths are forwarded as they are.
+3. `/actuator/gateway/routes` on the gateway lists the live routes.
+4. The image: `docker build -f services/mugen-gateway/Dockerfile -t mugen-gateway .` from the
+   root, run with `--network mugen_mugen-network` (compose prefixes the network name). It
+   reaches a host-run mugen-auth through Eureka, since instances register by IP. Both
+   Dockerfiles now `COPY services services` with the ignore file reducing the siblings to
+   their poms — the parent pom lists every module and Maven refuses a reactor with one
+   missing, `-pl` or not.
+
+### What to do next, in order
+1. **Phase 3.5, Config Server.** Three real config shapes exist now (auth, gateway, shared
+   defaults), which is what it was scheduled to wait for.
+2. **Phase 4, mugen-user** — the first plain resource server. It needs the same
+   `JwtDecoder` mugen-auth builds (`RsaKeyConverters` + timestamps + issuer +
+   `TokenTypeValidator`); that is the moment to move the decoder into a mugen-web
+   auto-configuration rather than write it a third time.
+3. Still deliberately open: 2.12 the device grant; `http/auth.http` not extended; nothing
+   ships logs to Loki (the gateway's `docker` profile emits ECS JSON for it).
+
 ## Status (2026-09-05) — the 2.11 gate is closed
 **mugen-auth is done as the template.** Every box on the 2.11 exit gate and every open
 item in 2.13 is ticked. `./mvnw verify` green: 107 unit + slice, 59 integration, ~45s.
@@ -755,6 +839,12 @@ belongs here is only why they exist.
   `ClientRegistrationRepository` → the /sso endpoints answer 404.
 
 ## Boot 4 traps (each bites once, then applies to all 9 remaining services)
+- **`management.otlp.tracing.endpoint` is deprecated at level *error* and binds nothing.**
+  Boot 4 renamed it `management.opentelemetry.tracing.export.otlp.endpoint`. The symptom
+  is silence: no error, no warning at startup, and Jaeger lists only itself.
+- **`spring.webflux.problemdetails.enabled` claims dispatch errors.** Its
+  `@ControllerAdvice` renders the 404 for an unmatched path as a bare ProblemDetail ahead
+  of any `WebExceptionHandler`. A reactive service with its own renderer turns it off.
 Boot 4 split autoconfiguration into one module per technology. The library class
 being on the classpath no longer means its autoconfiguration is:
 - `spring-boot-flyway` — without it migrations silently never run.

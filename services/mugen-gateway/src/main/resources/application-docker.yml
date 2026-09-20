@@ -1,0 +1,37 @@
+# Profile: docker
+#
+# Only for when the gateway is ITSELF running as a container (deployment), built
+# from this module's own Dockerfile. In development it runs on the host and the
+# default profile applies. The single difference is addressing: inside the
+# compose network, infra is reached by service name.
+
+spring:
+  data:
+    redis:
+      host: ${REDIS_HOST:redis}
+      port: ${REDIS_PORT:6379}
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://${EUREKA_HOST:eureka}:${EUREKA_PORT:8761}/eureka
+  instance:
+    prefer-ip-address: false
+
+management:
+  opentelemetry:
+    tracing:
+      export:
+        otlp:
+          endpoint: http://${JAEGER_HOST:jaeger}:${JAEGER_OTLP_HTTP_PORT:4318}/v1/traces
+  endpoints:
+    web:
+      exposure:
+        # No route listing once deployed: it names every internal service and path.
+        include: health,info,prometheus
+
+logging:
+  structured:
+    format:
+      # One JSON object per line for Loki, instead of the human-readable dev pattern.
+      console: ecs

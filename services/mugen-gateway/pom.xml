@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.mugen</groupId>
+        <artifactId>mugen-parent</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>mugen-gateway</artifactId>
+    <packaging>jar</packaging>
+
+    <name>mugen-gateway</name>
+    <description>The only entry point: routing, RS256 verification, revocation, rate limiting.</description>
+
+    <dependencies>
+        <!-- ================================ Gateway =================================
+             The WebFlux server, deliberately. Spring Cloud 2025.x also ships a
+             servlet-stack gateway (server-webmvc), but a proxy is the one workload
+             where a non-blocking stack earns its complexity: every request holds a
+             connection open to a downstream service for its whole duration, and on
+             a thread-per-request stack that thread is idle the entire time. -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-gateway-server-webflux</artifactId>
+        </dependency>
+        <!-- lb:// routes resolve through Eureka; the load balancer comes with it. -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
+        </dependency>
+        <!-- The reactor flavour: the servlet one blocks, which WebFlux forbids. -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-circuitbreaker-reactor-resilience4j</artifactId>
+        </dependency>
+
+        <!-- ================================ Security ================================
+             The gateway is a resource server over tokens it cannot mint: it holds
+             public.pem only. Same artifact as mugen-auth's verifier, so signing and
+             verifying share one implementation and one set of validation rules. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
+        </dependency>
+
+        <!-- ================================= Redis ==================================
+             Reactive, because the event loop must never block: one revocation lookup
+             and one rate-limit script per request. The blocking starter mugen-auth
+             uses would stall every other in-flight request for the round trip. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis-reactive</artifactId>
+        </dependency>
+
+        <!-- ============================ Shared contracts ============================ -->
+        <dependency>
+            <groupId>com.mugen</groupId>
+            <artifactId>mugen-shared</artifactId>
+        </dependency>
+        <!-- The AppException hierarchy and the problem type URIs. Its servlet-only
+             pieces (GlobalExceptionHandler, PublicEndpointMatcher) are conditional on
+             a DispatcherServlet and stay dormant here; the gateway renders problems
+             with its own reactive handler. -->
+        <dependency>
+            <groupId>com.mugen</groupId>
+            <artifactId>mugen-web</artifactId>
+        </dependency>
+
+        <!-- ============================= Observability ============================== -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
+        <!-- Same three as mugen-auth: Boot 4 ships tracing auto-configuration apart
+             from the libraries, and without it no traceId is ever written. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-micrometer-tracing-opentelemetry</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-tracing-bridge-otel</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-exporter-otlp</artifactId>
+        </dependency>
+
+        <!-- ================================= Test =================================== -->
+        <dependency>
+            <groupId>com.mugen</groupId>
+            <artifactId>mugen-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>

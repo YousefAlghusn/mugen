@@ -4,6 +4,7 @@ import com.mugen.test.support.CleanDatabaseExtension;
 import com.mugen.test.support.DatabaseCleaner;
 import com.mugen.test.support.MockMvcConfiguration;
 import com.mugen.test.support.MugenContainers;
+import com.mugen.test.support.WebTestClientConfiguration;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
@@ -22,8 +23,8 @@ import java.lang.annotation.Target;
  * <p>
  * <b>Used directly, by every service.</b> There is nothing to compose over it and
  * nothing to declare: the containers come from {@link MugenContainers}, which reads the
- * service's own classpath, and {@code MockMvc} and {@link DatabaseCleaner} are wired in
- * here.
+ * service's own classpath; {@code MockMvc} (servlet) or {@code WebTestClient} (reactive) and
+ * {@link DatabaseCleaner} are wired in here.
  *
  * <pre>{@code
  * @IntegrationTest
@@ -65,7 +66,7 @@ import java.lang.annotation.Target;
         "management.tracing.enabled=false"
 })
 @ActiveProfiles("test")
-@Import({MugenContainers.class, MockMvcConfiguration.class, DatabaseCleaner.class})
+@Import({MugenContainers.class, MockMvcConfiguration.class, WebTestClientConfiguration.class, DatabaseCleaner.class})
 @ExtendWith(CleanDatabaseExtension.class)
 public @interface IntegrationTest {
 }

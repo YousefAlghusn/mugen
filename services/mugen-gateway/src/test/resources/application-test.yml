@@ -1,0 +1,15 @@
+# Test configuration for every tier, layered over the gateway's real application.yml.
+# One file rather than per-class properties: the integration tier caches one context,
+# and a property set that differs per class is a second context and a second Redis.
+spring:
+  cloud:
+    gateway:
+      server:
+        webflux:
+          redis-rate-limiter:
+            config:
+              # Small enough to exhaust in a test, on a route only RateLimitTest uses; the
+              # other routes stay on the real default so nothing else trips it.
+              limited:
+                replenish-rate: 1
+                burst-capacity: 3

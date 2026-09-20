@@ -75,7 +75,8 @@
  * </ul>
  *
  * <h2>Fixtures</h2>
- * {@link com.mugen.test.Responses} reads {@code MockMvc} responses. Everything domain
+ * {@link com.mugen.test.Responses} reads {@code MockMvc} responses; a reactive service gets a
+ * {@code WebTestClient} instead of {@code MockMvc}, wired the same way. Everything domain
  * shaped stays in the service, in {@code support/}, as an <b>object mother returning a
  * fluent builder</b> — {@code UserMother.registered().withRoles(ADMIN).build()}. A mother
  * alone grows a method per variation; a builder alone puts five lines of setup in every

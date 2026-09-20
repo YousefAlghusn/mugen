@@ -29,6 +29,7 @@
         <module>shared/mugen-web</module>
         <module>shared/mugen-test</module>
         <module>services/mugen-auth</module>
+        <module>services/mugen-gateway</module>
     </modules>
 
     <properties>
