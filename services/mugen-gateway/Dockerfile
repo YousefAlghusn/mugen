@@ -62,6 +62,8 @@ COPY --from=build --chown=spring:spring /workspace/extracted/application/ ./
 
 USER spring:spring
 EXPOSE 8080
+# The actuator, for the orchestrator's probes and scrape only — never published.
+EXPOSE 9080
 
 # The image is only meaningful with this profile: it is what swaps localhost for
 # the container hostnames and drops the route listing from the actuator

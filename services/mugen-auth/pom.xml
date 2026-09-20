@@ -115,6 +115,13 @@
             <groupId>org.springframework.cloud</groupId>
             <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
         </dependency>
+        <!-- Pulls this service's configuration from config-server at startup and on
+             /actuator/refresh. The import is `optional:` (application.yml), so the
+             service still starts on its own file when the server is down. -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-config</artifactId>
+        </dependency>
 
         <!-- ================================== JWT ===================================
              Spring Security's own JOSE support (Nimbus underneath) rather than a

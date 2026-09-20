@@ -599,32 +599,50 @@ Spring Cloud's third foundational piece alongside Eureka (done) and Gateway
 application.yml files and restarting each.
 
 ### 3.5.1 config-server module
-- [ ] Standalone Maven module, NOT in the mugen-parent reactor — same reasoning
+- [x] Standalone Maven module, NOT in the mugen-parent reactor — same reasoning
       as `eureka-server/`: its Dockerfile must build without sibling modules
-- [ ] `@EnableConfigServer`, port 8888
-- [ ] Dockerfile + .dockerignore (use eureka-server as the template)
-- [ ] Add to compose.yml as infra + health check
+- [x] `@EnableConfigServer`, port 8888
+- [x] Dockerfile + .dockerignore (use eureka-server as the template)
+- [x] Add to compose.yml as infra + health check — `config-repo/` mounted read-only at
+      `/config-repo`, so an edit there is live on the next refresh or restart
 
 ### 3.5.2 config-repo
-- [ ] `config-repo/` git-backed store: `application.yml` (shared defaults),
-      `mugen-auth.yml`, `mugen-gateway.yml`
-- [ ] Native/filesystem backend for local dev, git backend for deploy
+- [x] `config-repo/` git-backed store: `application.yml` (shared defaults),
+      `mugen-auth.yml`, `mugen-gateway.yml` — plus `application-docker.yml` for the
+      container hostnames, mirroring each service's own docker profile. Every
+      per-machine value keeps its `${VAR:default}` placeholder, resolved in the
+      service's environment, so the `.env` Section B contract survives centralisation
+- [x] Native/filesystem backend for local dev, git backend for deploy —
+      `CONFIG_SERVER_PROFILE=native|git`, the git URI and branch from env
 
 ### 3.5.3 Client wiring (per service)
-- [ ] `spring.config.import: "optional:configserver:http://localhost:8888"`
+- [x] `spring.config.import: "optional:configserver:http://localhost:8888"`
       — the `optional:` prefix is required, not cosmetic: without it a service
       refuses to start when the config server is down, which breaks the
       run-from-IntelliJ dev story (see CLAUDE.md "Dev vs deploy").
       NOTE: bootstrap.yml is gone in modern Spring Cloud — do not reintroduce it.
-- [ ] `@RefreshScope` + `/actuator/refresh` on values worth changing at runtime
+- [x] `@RefreshScope` + `/actuator/refresh` on values worth changing at runtime — what
+      it became: `refresh` exposed on both services, and the values that rebind are the
+      JavaBean-shaped ones — log levels, and Spring Cloud's `RedisRateLimiter` buckets,
+      verified live (burst 5 → 2 in the repo, refresh, third login 429). mugen's own
+      `@ConfigurationProperties` are immutable records and deliberately do not: a TTL
+      or a key path changes with a restart. No `@RefreshScope` anywhere, because a
+      record cannot be proxied and nothing else wanted it. Two things a refresh needed:
+      the actuator on its own management port (908x), unpublished in a deployment and
+      enforced by mugen-web's `ManagementPortAutoConfiguration`, which refuses to start
+      a service whose actuator would share the public port; and
+      `eureka.client.refresh.enable: false`, because a refreshed Eureka client
+      re-registers with a blank hostname, gets a 400, and leaves a duplicate instance
+- The integration tier sets `spring.cloud.config.enabled=false` for every service, so a
+  config-server running on the developer's machine is never a hidden test input
 
 ### 3.5.4 Secrets — decided: env passthrough
-- [ ] Config Server holds NON-SECRET config only: hosts, ports, TTLs, log
+- [x] Config Server holds NON-SECRET config only: hosts, ports, TTLs, log
       levels, feature flags
-- [ ] Passwords, OAuth client secrets and keys stay as environment variables
+- [x] Passwords, OAuth client secrets and keys stay as environment variables
       resolved per service. Nothing sensitive enters the config repo, so no
       `{cipher}` key to protect and rotate.
-- [ ] **`private.pem` never goes in Config Server.** Even encrypted, anyone with
+- [x] **`private.pem` never goes in Config Server.** Even encrypted, anyone with
       config-repo read access could mint tokens for any user — exactly what
       RS256 asymmetric signing exists to prevent.
 

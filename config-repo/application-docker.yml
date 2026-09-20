@@ -1,0 +1,24 @@
+# Layered over application.yml for a service running with the `docker` profile —
+# that is, containerised on the compose network, where infra is reached by service
+# name and Kafka must use the INTERNAL listener. From the host these names do not
+# resolve, and 29092 is not published. See the header of .env.example.
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://${EUREKA_HOST:eureka}:${EUREKA_PORT:8761}/eureka
+
+spring:
+  data:
+    redis:
+      host: ${REDIS_HOST:redis}
+      port: ${REDIS_PORT:6379}
+  kafka:
+    bootstrap-servers: ${KAFKA_HOST:kafka}:29092
+
+management:
+  opentelemetry:
+    tracing:
+      export:
+        otlp:
+          endpoint: http://${JAEGER_HOST:jaeger}:${JAEGER_OTLP_HTTP_PORT:4318}/v1/traces

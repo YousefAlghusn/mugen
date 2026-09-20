@@ -62,6 +62,8 @@ COPY --from=build --chown=spring:spring /workspace/extracted/application/ ./
 
 USER spring:spring
 EXPOSE 8081
+# The actuator, for the orchestrator's probes and scrape only — never published.
+EXPOSE 9081
 
 # The image is only meaningful with this profile: it is what swaps localhost for
 # the container hostnames and turns the API docs off (application-docker.yml).

@@ -51,10 +51,11 @@ import java.lang.annotation.Target;
  * set of overrides is a distinct cache key. At this tier it is usually the wrong tool
  * anyway: the point of the tier is that the wiring is real.
  * <p>
- * Two properties are set for every service. Eureka registration would have the suite
- * announcing itself to a discovery server that is not running, and tracing would export
- * spans to a collector that is not either; both cost startup time and produce nothing
- * but connection errors in the log.
+ * Three properties are set for every service. Eureka registration would have the suite
+ * announcing itself to a discovery server that is not running, tracing would export
+ * spans to a collector that is not either, and the config client would pull whatever a
+ * config-server happens to be serving on the developer's machine — a hidden input that
+ * makes a test pass on one desk and fail on the next.
  *
  * @see com.mugen.test
  */
@@ -63,7 +64,8 @@ import java.lang.annotation.Target;
 @Documented
 @SpringBootTest(properties = {
         "eureka.client.enabled=false",
-        "management.tracing.enabled=false"
+        "management.tracing.enabled=false",
+        "spring.cloud.config.enabled=false"
 })
 @ActiveProfiles("test")
 @Import({MugenContainers.class, MockMvcConfiguration.class, WebTestClientConfiguration.class, DatabaseCleaner.class})

@@ -13,6 +13,11 @@ spring:
   application:
     name: mugen-gateway
 
+  config:
+    # Central configuration; `optional:` so the gateway starts on this file alone
+    # when config-server is down. See mugen-auth's application.yml for the full note.
+    import: "optional:configserver:${MUGEN_CONFIG_SERVER_URI:http://localhost:8888}"
+
   main:
     # Stated rather than deduced. The shared test library puts Spring MVC classes on the
     # test classpath, and Spring Cloud Gateway refuses to start in a servlet context.
@@ -178,6 +183,13 @@ eureka:
   client:
     service-url:
       defaultZone: ${MUGEN_EUREKA_URI:http://localhost:8761/eureka}
+    refresh:
+      # The registration does not follow a config refresh. Left on, the client is
+      # rebuilt from properties alone on every /actuator/refresh: the computed
+      # hostname and instance id come back blank, Eureka answers the re-registration
+      # with a 400, and a stale duplicate instance is left behind. Nothing in
+      # config-repo can change where this service listens anyway.
+      enable: false
   instance:
     prefer-ip-address: true
 
@@ -197,10 +209,14 @@ mugen:
     issuer: https://mugen.dev/auth
 
 management:
+  server:
+    # Own port, never published in a deployment — so the route listing and
+    # /actuator/refresh below are reachable from the machine, not from a browser.
+    port: ${GATEWAY_MANAGEMENT_PORT:9080}
   endpoints:
     web:
       exposure:
-        include: health,info,prometheus,gateway
+        include: health,info,prometheus,gateway,refresh
   endpoint:
     health:
       probes:

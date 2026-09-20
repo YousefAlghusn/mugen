@@ -1,0 +1,36 @@
+# mugen-gateway's tunables. Routes stay in the gateway's own application.yml: a
+# route is the URL contract with clients, and a mistake there should need a
+# deploy, not a refresh.
+
+spring:
+  cloud:
+    gateway:
+      server:
+        webflux:
+          httpclient:
+            connect-timeout: ${MUGEN_GATEWAY_CONNECT_TIMEOUT_MS:2000}
+            response-timeout: ${MUGEN_GATEWAY_RESPONSE_TIMEOUT:10s}
+          globalcors:
+            cors-configurations:
+              '[/**]':
+                allowed-origins: ${MUGEN_CORS_ALLOWED_ORIGINS:http://localhost:4200}
+          # Rebound on refresh: RedisRateLimiter is a JavaBean-style
+          # @ConfigurationProperties, so a new bucket size applies to the next
+          # request. This is the change most worth making without a restart.
+          redis-rate-limiter:
+            config:
+              defaultFilters:
+                replenish-rate: ${MUGEN_RATE_LIMIT_DEFAULT_RATE:20}
+                burst-capacity: ${MUGEN_RATE_LIMIT_DEFAULT_BURST:40}
+              auth-credentials:
+                replenish-rate: ${MUGEN_RATE_LIMIT_CREDENTIALS_RATE:1}
+                burst-capacity: ${MUGEN_RATE_LIMIT_CREDENTIALS_BURST:5}
+
+mugen:
+  gateway:
+    circuit-breaker:
+      timeout: ${MUGEN_CIRCUIT_BREAKER_TIMEOUT:5s}
+
+logging:
+  level:
+    com.mugen.gateway: DEBUG

@@ -73,9 +73,11 @@ public class SecurityConfig {
                         // endpoint's visibility is stated where the endpoint is.
                         .requestMatchers(publicEndpointMatcher).permitAll()
                         .requestMatchers(HttpMethod.GET, API_DOCS_ENDPOINTS).permitAll()
-                        // Liveness/readiness must answer before the app is warm, and
-                        // Prometheus scrapes without credentials on the private network.
-                        .requestMatchers(HttpMethod.GET, "/actuator/health/**", "/actuator/prometheus").permitAll()
+                        // The whole actuator: probes, the scrape, and config-server's
+                        // POST /actuator/refresh. Safe only because it is served on the
+                        // management port, which a deployment never publishes — and
+                        // mugen-web refuses to start if that port is ever the public one.
+                        .requestMatchers("/actuator/**").permitAll()
                         .anyRequest().authenticated())
 
                 // Standard resource server over the tokens this service itself issued.

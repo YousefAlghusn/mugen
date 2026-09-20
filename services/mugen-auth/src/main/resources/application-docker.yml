@@ -16,6 +16,9 @@ mugen:
     private-key: ${JWT_PRIVATE_KEY_PATH:file:/run/secrets/mugen-auth/private.pem}
 
 spring:
+  config:
+    import: "optional:configserver:http://${CONFIG_SERVER_HOST:config-server}:${CONFIG_SERVER_PORT:8888}"
+
   datasource:
     url: jdbc:sqlserver://${SQLSERVER_HOST:sqlserver}:${SQLSERVER_PORT:1433};databaseName=${SQLSERVER_DB:mugen_auth};encrypt=true;trustServerCertificate=true
     username: ${SQLSERVER_USER:sa}

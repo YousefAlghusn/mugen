@@ -198,9 +198,10 @@ holds for every endpoint mugen will ever have, including the ones nobody has wri
 - MongoDB (post, video, feed, notification)
 - Redis (cache, sessions, rate limiting, revocation cache)
 - Kafka (async events, KRaft mode — no ZooKeeper), MinIO (file storage), Elasticsearch (search)
-- Eureka (discovery), Spring Cloud Config Server (centralised config — Phase 3.5,
-  after the gateway; clients use `spring.config.import: "optional:configserver:..."`
-  so a service still starts when it is down)
+- Eureka (discovery), Spring Cloud Config Server (centralised config: `config-repo/`
+  served by the standalone `config-server/`; clients import it with `optional:` so a
+  service still starts when it is down, and the repo keeps `${VAR:default}`
+  placeholders so env overrides survive — see the header of `config-repo/application.yml`)
 - Observability: Jaeger + Prometheus + Grafana + Loki
 - Build: Maven Wrapper (`./mvnw`) — do not assume a `mvn` on PATH
 

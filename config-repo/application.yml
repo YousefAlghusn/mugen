@@ -1,0 +1,67 @@
+# Served to EVERY service by config-server — the shared defaults.
+#
+# Precedence, highest first: environment variables → this repo (the matching
+# <service>.yml, then this file) → the service's own application.yml. So a value
+# here overrides the service's local file whenever the server is reachable, and
+# the local file is what a service runs on when it is not (`optional:` import).
+#
+# Two rules keep that layering honest:
+#   1. Anything an operator sets per machine keeps its ${VAR:default} placeholder
+#      here too. Placeholders are resolved in the SERVICE's environment, so the
+#      .env Section B contract survives centralisation. A literal here would
+#      silently override the variable a developer just exported.
+#   2. Nothing secret. Passwords, OAuth secrets and keys are environment variables
+#      resolved per service and never enter this repo (tasks.md 3.5.4).
+#
+# Host addressing (localhost, published ports) — this is what host-run services
+# get. application-docker.yml layers the container hostnames over it.
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${MUGEN_EUREKA_URI:http://localhost:8761/eureka}
+
+spring:
+  data:
+    redis:
+      host: ${MUGEN_REDIS_HOST:localhost}
+      port: ${MUGEN_REDIS_PORT:6379}
+  kafka:
+    bootstrap-servers: ${MUGEN_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+
+# The two values every verifier must agree on with mugen-auth. Here, once, so a
+# rotation or a rename cannot leave one service refusing every token.
+mugen:
+  jwt:
+    issuer: https://mugen.dev/auth
+    public-key: ${JWT_PUBLIC_KEY_PATH:classpath:keys/public.pem}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        # `refresh` is what lets a change here reach a running service without a
+        # restart: POST /actuator/refresh on the management port.
+        include: health,info,prometheus,refresh
+  opentelemetry:
+    tracing:
+      export:
+        otlp:
+          endpoint: ${MUGEN_OTLP_TRACING_ENDPOINT:http://localhost:4318/v1/traces}
+  tracing:
+    sampling:
+      probability: ${MUGEN_TRACING_SAMPLING:1.0}
+
+logging:
+  pattern:
+    correlation: "[%X{traceId:-}] "
+  level:
+    # Log levels are re-read on refresh — the cheapest thing to change at runtime,
+    # and the one most often needed during an incident.
+    com.mugen: DEBUG
+    # On every refresh the rebinder warns once per record-shaped
+    # @ConfigurationProperties that it cannot reset it. That is the design, not a
+    # fault: mugen's properties are immutable records, and a TTL or a key path
+    # changes with a restart, deliberately. JavaBean-style ones (Spring Cloud's own
+    # RedisRateLimiter, log levels) do rebind.
+    org.springframework.cloud.context.properties.ConfigurationPropertiesRebinder: ERROR

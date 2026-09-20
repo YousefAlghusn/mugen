@@ -20,6 +20,13 @@ spring:
   application:
     name: mugen-auth
 
+  config:
+    # Central configuration (config-repo/, served by config-server). `optional:` is
+    # the dev story: with the server down the service starts on this file alone.
+    # What the server serves overrides what is below — see config-repo/application.yml
+    # for the precedence and the placeholder rule.
+    import: "optional:configserver:${MUGEN_CONFIG_SERVER_URI:http://localhost:8888}"
+
   lifecycle:
     timeout-per-shutdown-phase: 20s
 
@@ -141,6 +148,13 @@ eureka:
   client:
     service-url:
       defaultZone: ${MUGEN_EUREKA_URI:http://localhost:8761/eureka}
+    refresh:
+      # The registration does not follow a config refresh. Left on, the client is
+      # rebuilt from properties alone on every /actuator/refresh: the computed
+      # hostname and instance id come back blank, Eureka answers the re-registration
+      # with a 400, and a stale duplicate instance is left behind. Nothing in
+      # config-repo can change where this service listens anyway.
+      enable: false
   instance:
     # Host-run services register by IP; the Docker-internal hostname would be
     # unresolvable to anything outside the compose network.
@@ -221,10 +235,15 @@ mugen:
     revocation-cache-ttl: ${JWT_REVOCATION_CACHE_TTL_MINUTES:15}m
 
 management:
+  server:
+    # The actuator on its own port, which a deployment never publishes: that is what
+    # makes /actuator/refresh safe to leave unauthenticated. mugen-web refuses to
+    # start a service whose actuator would share the public port.
+    port: ${AUTH_SERVICE_MANAGEMENT_PORT:9081}
   endpoints:
     web:
       exposure:
-        include: health,info,prometheus
+        include: health,info,prometheus,refresh
   endpoint:
     health:
       show-details: when-authorized

@@ -4,6 +4,59 @@ Companion to tasks.md, which is the checklist. This file holds only what the cod
 and git history do NOT already say: live status, decisions and their reasoning,
 and traps worth not rediscovering.
 
+## Status (2026-09-20, later) — Phase 3.5, Config Server, done
+**config-server runs as infra in compose, and both services pull from it.** Standalone
+module like eureka-server; `config-repo/` mounted read-only into the container under the
+`native` profile, a `git` profile with URI and branch from env for deployment.
+`./mvnw verify` green (mugen-web +3 unit). Verified live: both services log `Fetching config
+from server`, `POST /actuator/refresh` answers `[]` when nothing changed and names the keys
+when something did, a bucket size changed in the repo applied to the next login attempt, and
+a log level changed in the repo silenced the request log without a restart.
+
+What the checklist does not say:
+
+- **Precedence and the placeholder rule.** Environment → repo (`<service>.yml`, then
+  `application.yml`) → the service's own `application.yml`. A value in the repo overrides
+  the local file, so a literal there would also override the `MUGEN_*` variable a developer
+  exported; every per-machine value in the repo keeps its `${VAR:default}`, which the
+  *service* resolves. The local files stay complete, because `optional:` means they are what
+  a service runs on when the server is down.
+- **What refreshes and what does not, by design.** JavaBean-shaped properties rebind:
+  log levels, Spring Cloud's `RedisRateLimiter`. mugen's own `@ConfigurationProperties`
+  are records — constructor-bound, immutable — and the rebinder skips them (its WARN is
+  lowered to ERROR in the shared repo file, with the reason). A TTL, a key path, a cookie
+  name change with a restart. No `@RefreshScope` anywhere.
+- **The actuator moved to a management port**, 908x beside each service's 808x, and is
+  now permitted wholesale in mugen-auth's filter chain (`/actuator/**`) on the strength of
+  that port never being published. `ManagementPortAutoConfiguration` in mugen-web refuses
+  to start any service where it would share the public port — the one way that assumption
+  could fail silently. Prometheus scrapes the 908x ports; both Dockerfiles `EXPOSE` them.
+- **`eureka.client.refresh.enable: false` on every service.** Left on, a refresh rebuilds
+  the Eureka client from properties alone, the computed hostname and instance id come back
+  blank, the re-registration is answered 400, and a duplicate instance lingers until
+  eviction. First seen as a 500 from `/actuator/refresh` (an NPE in
+  `Application.getByInstanceId`); pinning `instance-id` fixed the NPE and not the 400.
+  Nothing in the repo can change where a service listens, so the client has no reason to
+  follow a refresh.
+- **The integration tier switches the config client off** (`spring.cloud.config.enabled=
+  false`, third property on `@IntegrationTest`), so a config-server on the developer's
+  machine is never a hidden input to a test.
+- Not done, deliberately: the config server itself has no authentication. It serves no
+  secrets and sits on the private network; the day it needs a client credential is the
+  day the repo holds something worth one.
+
+### Resuming
+`docker compose up -d` now includes config-server on :8888; `curl :8888/mugen-gateway/default`
+shows what a service receives. Services as before; their actuators are on :9081 (auth) and
+:9080 (gateway) — `/actuator/health`, `/actuator/refresh` (POST), `/actuator/gateway/routes`.
+
+### What to do next, in order
+1. **Phase 4, mugen-user** — the first plain resource server, on Postgres. Move the
+   `JwtDecoder` construction (`RsaKeyConverters` + timestamps + issuer +
+   `TokenTypeValidator`) into a mugen-web auto-configuration on the way, rather than write
+   it a third time. New services get `config-repo/mugen-user.yml` and a 908x management port.
+2. 2.12 the device grant, `http/auth.http`, Loki shipping — still open, still deliberate.
+
 ## Status (2026-09-20) — Phase 3, the gateway, is built and run
 **mugen-gateway exists, and the whole of Phase 3 is ticked.** `./mvnw verify` green across
 the reactor: 106 unit + slice and 59 integration in auth, 3 + 21 in the gateway. Then run for

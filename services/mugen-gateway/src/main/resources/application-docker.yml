@@ -6,9 +6,12 @@
 # compose network, infra is reached by service name.
 
 spring:
+  config:
+    import: "optional:configserver:http://${CONFIG_SERVER_HOST:config-server}:${CONFIG_SERVER_PORT:8888}"
+
   data:
     redis:
-      host: ${REDIS_HOST:redis}
+      host: 
       port: ${REDIS_PORT:6379}
 
 eureka:
@@ -28,7 +31,7 @@ management:
     web:
       exposure:
         # No route listing once deployed: it names every internal service and path.
-        include: health,info,prometheus
+        include: health,info,prometheus,refresh
 
 logging:
   structured:

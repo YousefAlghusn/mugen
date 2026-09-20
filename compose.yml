@@ -240,6 +240,29 @@ services:
   # ==================================================================
   # Eureka — service discovery (standalone Spring Boot app, built locally)
   # ==================================================================
+  # Serves config-repo/ to every service (tasks.md 3.5). Infra like Eureka:
+  # standalone module, its own Dockerfile, mounted repo — edit a file under
+  # config-repo/ and the next /actuator/refresh or restart picks it up.
+  config-server:
+    build:
+      context: ./config-server
+    container_name: mugen-config-server
+    networks: [mugen-network]
+    ports:
+      - "${CONFIG_SERVER_PORT}:${CONFIG_SERVER_PORT}"
+    environment:
+      CONFIG_SERVER_PORT: ${CONFIG_SERVER_PORT}
+      CONFIG_SERVER_PROFILE: native
+      CONFIG_REPO_PATH: /config-repo
+    volumes:
+      - ./config-repo:/config-repo:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:${CONFIG_SERVER_PORT}/actuator/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
   eureka:
     build:
       context: ./eureka-server
