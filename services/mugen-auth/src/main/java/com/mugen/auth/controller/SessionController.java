@@ -4,6 +4,7 @@ import com.mugen.auth.dto.SessionResponse;
 import com.mugen.auth.exception.AuthExceptions;
 import com.mugen.auth.service.SessionService;
 import com.mugen.auth.token.CurrentUser;
+import com.mugen.web.error.TokenRevokedException;
 import com.mugen.web.openapi.Throws;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -33,7 +34,7 @@ import java.util.UUID;
         invitation to pass somebody else's.""")
 // A revoked session may not manage sessions — least of all these, which are what somebody
 // uses to eject an attacker. See RevokedSessionFilter.
-@Throws(AuthExceptions.TokenRevoked.class)
+@Throws(TokenRevokedException.class)
 public class SessionController {
 
     private final SessionService sessions;

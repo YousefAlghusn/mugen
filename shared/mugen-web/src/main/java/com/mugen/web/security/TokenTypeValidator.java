@@ -1,4 +1,6 @@
-package com.mugen.auth.token;
+package com.mugen.web.security;
+
+import com.mugen.shared.auth.TokenType;
 
 import org.springframework.security.oauth2.core.OAuth2Error;
 import org.springframework.security.oauth2.core.OAuth2TokenValidator;

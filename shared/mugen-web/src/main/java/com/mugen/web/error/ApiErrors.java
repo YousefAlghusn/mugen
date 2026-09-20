@@ -5,6 +5,7 @@ import org.springframework.core.annotation.MergedAnnotation;
 import org.springframework.core.annotation.MergedAnnotations;
 import org.springframework.core.annotation.MergedAnnotations.SearchStrategy;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 
 import java.net.URI;
 import java.util.List;
@@ -28,6 +29,24 @@ public final class ApiErrors {
 
     public static ApiErrorSpec of(Class<? extends AppException> exceptionType) {
         return SPECS.computeIfAbsent(exceptionType, ApiErrors::resolve);
+    }
+
+    /**
+     * The code for a failure the framework produced, where no exception declared one.
+     * Never {@code VALIDATION_FAILED}: that code's published contract is an {@code errors[]}
+     * naming each rejected field, and none of these carry one.
+     */
+    public static ErrorCode codeFor(HttpStatusCode status) {
+        return switch (status.value()) {
+            case 404 -> ErrorCode.RESOURCE_NOT_FOUND;
+            case 405 -> ErrorCode.METHOD_NOT_ALLOWED;
+            case 415 -> ErrorCode.UNSUPPORTED_MEDIA_TYPE;
+            case 429 -> ErrorCode.RATE_LIMIT_EXCEEDED;
+            case 503 -> ErrorCode.SERVICE_UNAVAILABLE;
+            default -> status.is4xxClientError()
+                    ? ErrorCode.MALFORMED_REQUEST
+                    : ErrorCode.INTERNAL_ERROR;
+        };
     }
 
     /** The {@code type} URI for a code, so the document and the thrown response agree on it. */

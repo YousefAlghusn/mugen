@@ -4,7 +4,7 @@ import com.mugen.auth.config.JwtProperties;
 import com.mugen.auth.entity.User;
 import com.mugen.auth.exception.AuthExceptions;
 import com.mugen.auth.dto.RefreshTokenClaims;
-import com.mugen.auth.token.TokenType;
+import com.mugen.shared.auth.TokenType;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;

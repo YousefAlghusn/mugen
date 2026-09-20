@@ -1,4 +1,4 @@
-package com.mugen.auth.token;
+package com.mugen.shared.auth;
 
 /**
  * Value of the {@code type} claim, present on every token this service mints.

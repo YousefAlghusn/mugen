@@ -166,7 +166,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                                                           WebRequest request) {
         if (body instanceof ProblemDetail problemDetail) {
             problemDetail.setProperty("traceId", TraceIdHolder.resolve());
-            problemDetail.setProperty("code", codeFor(statusCode));
+            problemDetail.setProperty("code", ApiErrors.codeFor(statusCode).name());
         }
         return super.createResponseEntity(body, headers, statusCode, request);
     }
@@ -192,20 +192,4 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return body;
     }
 
-    /**
-     * Never {@code VALIDATION_FAILED} — that code's published contract is an
-     * {@code errors[]} naming each rejected field, and none of these carry one. A
-     * client branching on {@code code} was being told to read an array that is
-     * never there.
-     */
-    private static String codeFor(HttpStatusCode status) {
-        return switch (status.value()) {
-            case 404 -> ErrorCode.RESOURCE_NOT_FOUND.name();
-            case 405 -> ErrorCode.METHOD_NOT_ALLOWED.name();
-            case 415 -> ErrorCode.UNSUPPORTED_MEDIA_TYPE.name();
-            default -> status.is4xxClientError()
-                    ? ErrorCode.MALFORMED_REQUEST.name()
-                    : ErrorCode.INTERNAL_ERROR.name();
-        };
-    }
 }

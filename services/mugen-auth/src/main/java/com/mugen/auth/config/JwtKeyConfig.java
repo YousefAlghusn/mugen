@@ -1,7 +1,7 @@
 package com.mugen.auth.config;
 
-import com.mugen.auth.token.TokenType;
-import com.mugen.auth.token.TokenTypeValidator;
+import com.mugen.shared.auth.TokenType;
+import com.mugen.web.security.TokenTypeValidator;
 import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;

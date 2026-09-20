@@ -38,7 +38,7 @@ public final class TraceIdHolder {
      */
     public static String resolve() {
         String traceId = MDC.get(TRACE_ID_KEY);
-        return traceId != null ? traceId : newW3CTraceId();
+        return traceId != null ? traceId : mint();
     }
 
     public static void set(String traceId) {
@@ -53,8 +53,13 @@ public final class TraceIdHolder {
         MDC.remove(TRACE_ID_KEY);
     }
 
-    /** 128 random bits as 32 lower-case hex chars, matching W3C Trace Context. */
-    private static String newW3CTraceId() {
+    /**
+     * 128 random bits as 32 lower-case hex chars, matching W3C Trace Context. Public for
+     * the reactive stack, where MDC is not a safe place to look: an event-loop thread may
+     * still carry the previous request's value, so {@link #resolve()} could answer with
+     * someone else's id.
+     */
+    public static String mint() {
         UUID uuid = UUID.randomUUID();
         return "%016x%016x".formatted(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
     }

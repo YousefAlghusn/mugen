@@ -3,6 +3,7 @@ package com.mugen.auth.security;
 import com.mugen.auth.exception.AuthExceptions;
 import com.mugen.auth.service.RevocationCacheService;
 import com.mugen.auth.token.CurrentUser;
+import com.mugen.web.error.TokenRevokedException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -67,7 +68,7 @@ public class RevokedSessionFilter extends OncePerRequestFilter {
 
         if (revocationCache.isRevoked(sessionId)) {
             log.debug("Refused a revoked session sessionId={}", sessionId);
-            refuse(request, response, new AuthExceptions.TokenRevoked());
+            refuse(request, response, new TokenRevokedException());
             return;
         }
 

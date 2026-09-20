@@ -1,8 +1,8 @@
 package com.mugen.auth.controller;
 
 import com.mugen.auth.dto.MeResponse;
-import com.mugen.auth.exception.AuthExceptions;
 import com.mugen.auth.token.CurrentUser;
+import com.mugen.web.error.TokenRevokedException;
 import com.mugen.web.openapi.Throws;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "Token introspection", description = "Answers \"who am I\" and \"is this token still good\".")
 // Every secured endpoint of this service can answer it, not only /validate — see
 // RevokedSessionFilter.
-@Throws(AuthExceptions.TokenRevoked.class)
+@Throws(TokenRevokedException.class)
 public class TokenIntrospectController {
 
     /**

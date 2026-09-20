@@ -230,10 +230,15 @@ management:
       show-details: when-authorized
       probes:
         enabled: true
-  otlp:
+  opentelemetry:
     tracing:
-      # OTLP over HTTP, not gRPC — this is why compose publishes Jaeger's 4318.
-      endpoint: ${MUGEN_OTLP_TRACING_ENDPOINT:http://localhost:4318/v1/traces}
+      export:
+        otlp:
+          # OTLP over HTTP, not gRPC — this is why compose publishes Jaeger's 4318.
+          # Boot 4 moved this key: the Boot 3 `management.otlp.tracing.endpoint` is
+          # deprecated at level *error*, so it binds nothing and every span was
+          # silently dropped until the first look at Jaeger noticed.
+          endpoint: ${MUGEN_OTLP_TRACING_ENDPOINT:http://localhost:4318/v1/traces}
   tracing:
     sampling:
       # Sample everything in dev. Must be lowered in production.
@@ -250,3 +255,11 @@ logging:
     com.mugen.auth: DEBUG
     # Uncomment when debugging Flyway/JPA schema drift.
     # org.hibernate.SQL: DEBUG
+    #
+    # Uncomment to watch transaction boundaries — see docs/dev/transactions.md §12.
+    # The first line says whether the proxy fired at all ("Getting transaction for
+    # [SessionService.rotate]"), the second what it decided (new, joined, suspended,
+    # commit, rollback), and org.hibernate.SQL above shows when each statement was
+    # flushed relative to those.
+    # org.springframework.transaction.interceptor: TRACE
+    # org.springframework.orm.jpa.JpaTransactionManager: DEBUG

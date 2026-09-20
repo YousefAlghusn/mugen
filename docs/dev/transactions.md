@@ -278,3 +278,42 @@ status.setRollbackOnly();                               // programmatic doom
 @Version                                                // optimistic; conflict throws at flush
 @EntityGraph(attributePaths = "roles")                  // fetch before the bracket closes
 ```
+---
+
+## 12. Watching it happen
+
+Three loggers, all Spring's own, commented out in `application.yml` and switched on
+together:
+
+```yaml
+org.springframework.transaction.interceptor: TRACE      # proxy fired: "Getting transaction for [...]"
+org.springframework.orm.jpa.JpaTransactionManager: DEBUG # begin / participating / suspending / commit / rollback
+org.hibernate.SQL: DEBUG                                 # the moment each statement is flushed
+```
+
+The first line is the one that would have caught §2: the self-invocation bug shows up as
+*no* `Getting transaction for [OAuthService.linkOrCreate]` line. The second answers the
+propagation questions in §4. Together with a `Thread.sleep` inside the bracket they show
+the ordering directly:
+
+```
+Getting transaction for [AuthService.register]        ← proxy
+Creating new transaction with name [...register]      ← begin
+insert into users ...                                 ← saveAndFlush: SQL out now
+        (sleep — query the table from another session here)
+insert into outbox_events ...                         ← plain save: flushed at commit time
+Initiating transaction commit
+Completing transaction for [AuthService.register]
+```
+
+**The other-session check has a SQL Server trap.** Its default `READ COMMITTED` uses
+locks, not snapshots (`READ_COMMITTED_SNAPSHOT` is off in the init scripts), so a plain
+`SELECT` on the row during the sleep does not return "no row" — it **blocks until the
+transaction ends**. Correct, but it looks like a hang. `SELECT ... WITH (NOLOCK)` shows the
+flushed-but-uncommitted row instead; the pair demonstrates flush-vs-commit better than any
+log line. Postgres (user, payment) returns immediately with no row.
+
+For something reusable — metrics, a filter on `com.mugen.*` names — Spring 6.1's
+`TransactionExecutionListener` is the official hook, and Boot registers every bean of
+that type on the transaction manager. Not needed for watching; built when a service wants
+commit/rollback counts.

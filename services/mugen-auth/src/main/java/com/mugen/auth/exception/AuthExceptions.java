@@ -67,13 +67,6 @@ public final class AuthExceptions {
         }
     }
 
-    @ApiError(code = ErrorCode.TOKEN_REVOKED,
-            description = "The session was revoked — by a sign-out elsewhere, or by replay detection.")
-    public static class TokenRevoked extends UnauthorizedException {
-        public TokenRevoked() {
-            super("Session has been revoked.");
-        }
-    }
 
     /**
      * Extends the shared type rather than restating {@code TOKEN_INVALID}, so the code

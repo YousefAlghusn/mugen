@@ -19,6 +19,9 @@ public enum ErrorCode {
     BUSINESS_RULE_VIOLATION,
     FORBIDDEN,
     RATE_LIMIT_EXCEEDED,
+    // The gateway answering for a service it could not reach: circuit open, no instance
+    // registered, or the call timed out.
+    SERVICE_UNAVAILABLE,
     INTERNAL_ERROR,
 
     // Auth (mugen-auth / mugen-gateway)
