@@ -2,3 +2,4 @@ com.mugen.web.error.MugenErrorHandlingAutoConfiguration
 com.mugen.web.security.MugenSecurityAutoConfiguration
 com.mugen.web.openapi.MugenApiDocsAutoConfiguration
 com.mugen.web.management.ManagementPortAutoConfiguration
+com.mugen.web.security.MugenResourceServerAutoConfiguration

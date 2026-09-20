@@ -65,6 +65,12 @@
             <artifactId>spring-security-oauth2-jose</artifactId>
             <optional>true</optional>
         </dependency>
+        <!-- For the resource-server auto-configuration: the decoder every service verifies with. -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-oauth2-resource-server</artifactId>
+            <optional>true</optional>
+        </dependency>
 
         <!--
             For the OpenAPI customizers. Optional like the rest: a service that
