@@ -170,6 +170,11 @@
             <groupId>com.mugen</groupId>
             <artifactId>mugen-web</artifactId>
         </dependency>
+        <!-- The transactional outbox: entity, poller and write API. The table is V4. -->
+        <dependency>
+            <groupId>com.mugen</groupId>
+            <artifactId>mugen-outbox</artifactId>
+        </dependency>
 
         <!-- ============================= Observability ============================== -->
         <dependency>

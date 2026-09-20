@@ -1,9 +1,9 @@
-package com.mugen.auth.unit;
+package com.mugen.outbox.unit;
 
-import com.mugen.auth.config.OutboxProperties;
-import com.mugen.auth.entity.OutboxEvent;
-import com.mugen.auth.repository.OutboxEventRepository;
-import com.mugen.auth.service.OutboxPoller;
+import com.mugen.outbox.OutboxProperties;
+import com.mugen.outbox.OutboxEvent;
+import com.mugen.outbox.OutboxEventRepository;
+import com.mugen.outbox.OutboxPoller;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -11,6 +11,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Limit;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.SendResult;
 
@@ -80,7 +81,7 @@ class OutboxPollerTest {
     @Test
     @DisplayName("an empty outbox does not touch the broker")
     void emptyBatchDoesNothing() {
-        when(outbox.claimBatch(100)).thenReturn(List.of());
+        when(outbox.claimBatch(any(), eq(Limit.of(100)))).thenReturn(List.of());
 
         poller.publishPending();
 
@@ -91,7 +92,7 @@ class OutboxPollerTest {
     @DisplayName("an acknowledged event is marked published and never re-sent")
     void marksAcknowledgedEventsPublished() {
         OutboxEvent event = event("{\"a\":1}");
-        when(outbox.claimBatch(100)).thenReturn(List.of(event));
+        when(outbox.claimBatch(any(), eq(Limit.of(100)))).thenReturn(List.of(event));
         when(kafka.send(anyString(), anyString(), anyString())).thenReturn(acknowledged());
 
         poller.publishPending();
@@ -104,7 +105,7 @@ class OutboxPollerTest {
     @DisplayName("the payload is published byte-for-byte under the row's own key")
     void publishesStoredPayloadVerbatim() {
         OutboxEvent event = event("{\"eventId\":\"abc\",\"username\":\"kaneki\"}");
-        when(outbox.claimBatch(100)).thenReturn(List.of(event));
+        when(outbox.claimBatch(any(), eq(Limit.of(100)))).thenReturn(List.of(event));
         when(kafka.send(anyString(), anyString(), anyString())).thenReturn(acknowledged());
 
         poller.publishPending();
@@ -118,7 +119,7 @@ class OutboxPollerTest {
     @DisplayName("a rejected send leaves the event pending, with the reason recorded")
     void reschedulesRejectedSends() {
         OutboxEvent event = event("{\"a\":1}");
-        when(outbox.claimBatch(100)).thenReturn(List.of(event));
+        when(outbox.claimBatch(any(), eq(Limit.of(100)))).thenReturn(List.of(event));
         when(kafka.send(anyString(), anyString(), anyString())).thenReturn(rejected("broker unreachable"));
 
         poller.publishPending();
@@ -140,7 +141,7 @@ class OutboxPollerTest {
         OutboxEvent first = event("{\"n\":1}");
         OutboxEvent poison = event("{\"n\":2}");
         OutboxEvent third = event("{\"n\":3}");
-        when(outbox.claimBatch(100)).thenReturn(List.of(first, poison, third));
+        when(outbox.claimBatch(any(), eq(Limit.of(100)))).thenReturn(List.of(first, poison, third));
         when(kafka.send(anyString(), eq(first.getMessageKey()), anyString())).thenReturn(acknowledged());
         when(kafka.send(anyString(), eq(poison.getMessageKey()), anyString())).thenReturn(rejected("nope"));
         when(kafka.send(anyString(), eq(third.getMessageKey()), anyString())).thenReturn(acknowledged());
@@ -157,7 +158,7 @@ class OutboxPollerTest {
     @DisplayName("the whole batch is handed to the producer before any acknowledgement is awaited")
     void sendsBatchBeforeWaiting() {
         List<OutboxEvent> batch = List.of(event("{\"n\":1}"), event("{\"n\":2}"), event("{\"n\":3}"));
-        when(outbox.claimBatch(100)).thenReturn(batch);
+        when(outbox.claimBatch(any(), eq(Limit.of(100)))).thenReturn(batch);
         when(kafka.send(anyString(), anyString(), anyString())).thenReturn(acknowledged());
 
         poller.publishPending();
@@ -183,7 +184,7 @@ class OutboxPollerTest {
     @DisplayName("publishing never deletes — the purge sweep is the only thing that does")
     void publishingDoesNotDelete() {
         OutboxEvent event = event("{\"a\":1}");
-        when(outbox.claimBatch(100)).thenReturn(List.of(event));
+        when(outbox.claimBatch(any(), eq(Limit.of(100)))).thenReturn(List.of(event));
         when(kafka.send(anyString(), anyString(), anyString())).thenReturn(acknowledged());
 
         poller.publishPending();

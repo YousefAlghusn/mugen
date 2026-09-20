@@ -1,0 +1,23 @@
+# The module's own tests: Postgres from MugenContainers, the schema this module ships,
+# and no broker — the poller is off, and the claim query is exercised directly.
+spring:
+  flyway:
+    locations: classpath:db/outbox/postgresql
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  kafka:
+    bootstrap-servers: localhost:1
+
+mugen:
+  outbox:
+    enabled: false
+    batch-size: 100
+    send-timeout: 10s
+    initial-backoff: 2s
+    max-backoff: 5m
+    alert-after-attempts: 10
+    retention: 7d
+    poll-interval: 1s
+    purge-interval: 1h

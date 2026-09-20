@@ -1,4 +1,4 @@
-package com.mugen.auth.config;
+package com.mugen.outbox;
 
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;

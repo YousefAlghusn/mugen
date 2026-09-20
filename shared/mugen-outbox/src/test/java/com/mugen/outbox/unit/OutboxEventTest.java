@@ -1,6 +1,6 @@
-package com.mugen.auth.unit;
+package com.mugen.outbox.unit;
 
-import com.mugen.auth.entity.OutboxEvent;
+import com.mugen.outbox.OutboxEvent;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;

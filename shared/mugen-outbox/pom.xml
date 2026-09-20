@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.mugen</groupId>
+        <artifactId>mugen-parent</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>mugen-outbox</artifactId>
+    <packaging>jar</packaging>
+
+    <name>mugen-outbox</name>
+    <description>
+        The transactional outbox for JPA services: an event is written as a row in the
+        same transaction as the change it describes, and a poller moves it to Kafka
+        afterwards. Auto-configured, so a service adds the dependency and a migration.
+    </description>
+
+    <dependencies>
+        <!-- DomainEvent, the contract every payload satisfies. -->
+        <dependency>
+            <groupId>com.mugen</groupId>
+            <artifactId>mugen-shared</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+        <!--
+            Both halves, same Boot 4 split as in mugen-auth's pom: spring-kafka has the
+            KafkaTemplate class, spring-boot-kafka has the auto-configuration that turns
+            spring.kafka.* into a bean of it.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-kafka</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka</artifactId>
+        </dependency>
+        <!-- Serialises the payload once, at write time, with the service's mapper. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-jackson</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+
+        <!--
+            This module tests its own table against Postgres — the schema it ships under
+            db/outbox/postgresql — so a service inheriting it needs no test of the
+            claim query's locking. mugen-auth keeps its SQL Server one.
+        -->
+        <dependency>
+            <groupId>com.mugen</groupId>
+            <artifactId>mugen-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-flyway</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+</project>

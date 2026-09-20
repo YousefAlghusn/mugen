@@ -1,14 +1,10 @@
-package com.mugen.auth.service;
+package com.mugen.outbox;
 
-import com.mugen.auth.config.OutboxProperties;
-import com.mugen.auth.entity.OutboxEvent;
-import com.mugen.auth.repository.OutboxEventRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.data.domain.Limit;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
@@ -26,9 +22,7 @@ import java.util.concurrent.TimeUnit;
  * commit is re-sent — which is why consumers deduplicate on {@code eventId}.
  */
 @Slf4j
-@Component
 @RequiredArgsConstructor
-@ConditionalOnProperty(name = "mugen.outbox.enabled", havingValue = "true", matchIfMissing = true)
 public class OutboxPoller {
 
     private final OutboxEventRepository outboxEvents;
@@ -43,7 +37,7 @@ public class OutboxPoller {
      * <p>
      * The transaction spans the Kafka round trip, which is normally wrong. It is
      * defensible here because the locks are contended only by other pollers, which
-     * {@code READPAST} skips, never by registration, which only inserts — and
+     * skip locked rows, never by the writers, which only insert — and
      * {@code sendTimeout} bounds the wait regardless.
      */
     @Scheduled(
@@ -51,7 +45,7 @@ public class OutboxPoller {
             fixedDelayString = "${mugen.outbox.poll-interval}")
     @Transactional
     public void publishPending() {
-        List<OutboxEvent> batch = outboxEvents.claimBatch(outboxProperties.batchSize());
+        List<OutboxEvent> batch = outboxEvents.claimBatch(Instant.now(), Limit.of(outboxProperties.batchSize()));
         if (batch.isEmpty()) {
             return;
         }

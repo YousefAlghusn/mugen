@@ -6,7 +6,7 @@ import com.mugen.auth.entity.OAuthProvider;
 import com.mugen.auth.entity.User;
 import com.mugen.auth.oauth.PendingAuthorization;
 import com.mugen.auth.repository.OAuthLinkRepository;
-import com.mugen.auth.repository.OutboxEventRepository;
+import com.mugen.outbox.OutboxEventRepository;
 import com.mugen.auth.repository.UserRepository;
 import com.mugen.auth.service.OAuthService;
 import com.mugen.auth.support.StubbedProvider;

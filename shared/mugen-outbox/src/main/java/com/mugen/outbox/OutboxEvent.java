@@ -1,4 +1,4 @@
-package com.mugen.auth.entity;
+package com.mugen.outbox;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -20,7 +20,7 @@ import java.util.UUID;
  * One Kafka message owed to the broker, so "the user was created" and "the world was
  * told" commit together. Publishing happens afterwards and may fail freely.
  * <p>
- * Not a {@link BaseEntity}: this is a queue row whose id is assigned by the caller and
+ * A queue row, not a domain entity: its id is assigned by the caller and
  * is also the payload's {@code eventId} — one identifier through to the consumer that
  * deduplicates on it.
  */
@@ -30,7 +30,7 @@ import java.util.UUID;
 @NoArgsConstructor(access = AccessLevel.PROTECTED) // Required by JPA.
 public class OutboxEvent implements Persistable<UUID> {
 
-    /** Longest error text kept; the column is NVARCHAR(1000). */
+    /** Longest error text kept; the column is 1000 characters wide. */
     private static final int MAX_ERROR_LENGTH = 1000;
 
     @Id
@@ -87,7 +87,7 @@ public class OutboxEvent implements Persistable<UUID> {
 
     /**
      * Records a message as owed. Must run inside the transaction performing the write
-     * it describes — {@link com.mugen.auth.service.UserEventPublisher} enforces it.
+     * it describes — {@link Outbox} enforces it.
      *
      * @param eventId    also the {@code eventId} inside {@code payloadJson}
      * @param messageKey Kafka partition key, so events about one aggregate stay ordered
