@@ -1,13 +1,13 @@
 # syntax=docker/dockerfile:1.7
 
 # ---------------------------------------------------------------------------
-# mugen-auth, for deployment only. In development this service runs on the host
+# mugen-gateway, for deployment only. In development this service runs on the host
 # — see CLAUDE.md, "Dev vs deploy" — and the root compose.yml is infrastructure
 # only, so nothing here is wired into it.
 #
 # BUILD FROM THE REPOSITORY ROOT, not from this directory:
 #
-#     docker build -f services/mugen-auth/Dockerfile -t mugen-auth .
+#     docker build -f services/mugen-gateway/Dockerfile -t mugen-gateway .
 #
 # This module is part of the mugen-parent reactor and compiles against
 # mugen-shared and mugen-web, so the parent pom and both shared modules have to
@@ -39,15 +39,15 @@ COPY services services
 # integration tier needs a Docker daemon of its own, and a release is built from
 # a commit `./mvnw verify` has already passed.
 RUN --mount=type=cache,target=/root/.m2 \
-    mvn -B -q -pl services/mugen-auth -am package -DskipTests \
-    && cp services/mugen-auth/target/*.jar application.jar \
+    mvn -B -q -pl services/mugen-gateway -am package -DskipTests \
+    && cp services/mugen-gateway/target/*.jar application.jar \
     && java -Djarmode=tools -jar application.jar extract --layers --destination extracted
 
 # ---------------------------------------------------------------------------
 # Runtime stage
 #
 # Layers are copied least- to most-frequently-changed so that a code-only change
-# re-uploads just the small application layer, not the ~60MB of dependencies.
+# re-uploads just the small application layer, not the ~70MB of dependencies.
 # ---------------------------------------------------------------------------
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
@@ -61,28 +61,15 @@ COPY --from=build --chown=spring:spring /workspace/extracted/snapshot-dependenci
 COPY --from=build --chown=spring:spring /workspace/extracted/application/ ./
 
 USER spring:spring
-EXPOSE 8081
+EXPOSE 8080
 
 # The image is only meaningful with this profile: it is what swaps localhost for
-# the container hostnames and turns the API docs off (application-docker.yml).
+# the container hostnames and drops the route listing from the actuator
+# (application-docker.yml).
 ENV SPRING_PROFILES_ACTIVE=docker
 
-# ---------------------------------------------------------------------------
-# The signing key is NOT in this image, deliberately.
-#
-# public.pem is committed and travels in the jar — every service needs it to
-# verify. private.pem is gitignored and never built in: an image is pushed to a
-# registry and pulled by anyone with read access, and a key baked into one is a
-# key that cannot be rotated without a rebuild. Mount it at runtime and point
-# the service at it:
-#
-#     -v ./private.pem:/run/secrets/mugen-auth/private.pem:ro
-#     -e JWT_PRIVATE_KEY_PATH=file:/run/secrets/mugen-auth/private.pem
-#
-# application-docker.yml already defaults to that path, so a correctly mounted
-# secret needs no environment variable at all. Without it the service refuses to
-# start, which is the right failure: a JWT issuer with no key can do nothing.
-# ---------------------------------------------------------------------------
+# Only public.pem travels in the jar. The gateway verifies and never signs, so
+# there is no secret to mount: a leaked image can check tokens, not mint them.
 
 # MaxRAMPercentage so the JVM honours the container memory limit rather than
 # sizing the heap off the host's total RAM.

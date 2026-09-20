@@ -5,7 +5,8 @@
 # The context is the whole repository, so this is subtractive: everything the
 # build does not need, plus everything that must never enter an image.
 
-# Never in an image: the signing key is mounted at runtime.
+# Never in an image. The gateway has no private key, but the pattern stays so a
+# copy of one can never ride along by accident.
 **/keys/private.pem
 .env
 .env.*
@@ -35,11 +36,11 @@ compose.yml
 **/Dockerfile.dockerignore
 **/.dockerignore
 
-# Other modules. mugen-auth needs the parent pom and shared/, and nothing else —
+# Other modules. mugen-gateway needs the parent pom and shared/, and nothing else —
 # except every sibling's pom.xml, because the parent pom lists them all as
 # modules and Maven refuses to read a reactor with a module directory missing,
 # -pl or not. A pom alone is enough for it to be "present".
 eureka-server/
 services/*
 !services/*/pom.xml
-!services/mugen-auth/
+!services/mugen-gateway/

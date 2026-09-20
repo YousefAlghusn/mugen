@@ -39,9 +39,11 @@ eureka:
     prefer-ip-address: false
 
 management:
-  otlp:
+  opentelemetry:
     tracing:
-      endpoint: http://${JAEGER_HOST:jaeger}:${JAEGER_OTLP_HTTP_PORT:4318}/v1/traces
+      export:
+        otlp:
+          endpoint: http://${JAEGER_HOST:jaeger}:${JAEGER_OTLP_HTTP_PORT:4318}/v1/traces
 
 # ---------------------------------------------------------------------------
 # API docs: OFF by default once this service is deployed. Decision, not an
