@@ -68,10 +68,11 @@
             <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
 
-        <!-- ================================= MinIO ================================== -->
+        <!-- ================================= MinIO ==================================
+             Presigned URLs in and out, and the Redis cache of the outbound ones. -->
         <dependency>
-            <groupId>io.minio</groupId>
-            <artifactId>minio</artifactId>
+            <groupId>com.mugen</groupId>
+            <artifactId>mugen-storage</artifactId>
         </dependency>
 
         <!-- ================================= Kafka ==================================

@@ -29,6 +29,7 @@
         <module>shared/mugen-web</module>
         <module>shared/mugen-test</module>
         <module>shared/mugen-outbox</module>
+        <module>shared/mugen-storage</module>
         <module>services/mugen-auth</module>
         <module>services/mugen-gateway</module>
         <module>services/mugen-user</module>
@@ -117,6 +118,11 @@
             <dependency>
                 <groupId>com.mugen</groupId>
                 <artifactId>mugen-outbox</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.mugen</groupId>
+                <artifactId>mugen-storage</artifactId>
                 <version>${project.version}</version>
             </dependency>
         </dependencies>

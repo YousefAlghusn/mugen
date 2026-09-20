@@ -1,4 +1,4 @@
-package com.mugen.user.pagination;
+package com.mugen.web.pagination;
 
 import com.mugen.web.error.BusinessRuleException;
 

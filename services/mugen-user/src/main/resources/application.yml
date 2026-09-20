@@ -122,14 +122,14 @@ mugen:
     endpoint: ${MUGEN_MINIO_ENDPOINT:http://localhost:9000}
     access-key: ${MUGEN_MINIO_ACCESS_KEY:mugen}
     secret-key: ${MUGEN_MINIO_SECRET_KEY:ChangeMe_Str0ng!}
+    # URL valid 60 min, cached 50 min, so a cached URL can never be handed out after
+    # it has expired (CLAUDE.md, MinIO buckets).
+    presigned-url-ttl: ${MINIO_PRESIGNED_URL_TTL_MINUTES:60}m
+    presigned-url-cache-ttl: ${MINIO_PRESIGNED_URL_CACHE_TTL_MINUTES:50}m
 
   avatars:
     bucket: ${MINIO_BUCKET_AVATARS:mugen-avatars}
     upload-url-ttl: 10m
-    # URL valid 60 min, cached 50 min, so a cached URL can never be handed out after
-    # it has expired (CLAUDE.md, MinIO buckets).
-    url-ttl: ${MINIO_PRESIGNED_URL_TTL_MINUTES:60}m
-    url-cache-ttl: ${MINIO_PRESIGNED_URL_CACHE_TTL_MINUTES:50}m
 
   outbox:
     enabled: ${MUGEN_OUTBOX_ENABLED:true}

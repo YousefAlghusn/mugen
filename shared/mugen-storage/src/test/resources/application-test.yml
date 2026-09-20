@@ -1,0 +1,5 @@
+# The endpoint and credentials come from MugenContainers; the TTLs are the module's own.
+mugen:
+  minio:
+    presigned-url-ttl: 60m
+    presigned-url-cache-ttl: 50m

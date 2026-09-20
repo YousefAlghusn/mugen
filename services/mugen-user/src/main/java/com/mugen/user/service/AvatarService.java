@@ -5,10 +5,10 @@ import com.mugen.user.dto.AvatarUploadResponse;
 import com.mugen.user.entity.UserProfile;
 import com.mugen.user.exception.UserExceptions;
 import com.mugen.user.repository.UserProfileRepository;
-import com.mugen.user.storage.MinioClientWrapper;
+import com.mugen.storage.ObjectStorage;
+import com.mugen.storage.PresignedUrls;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,16 +26,14 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class AvatarService {
 
-    private static final String URL_CACHE_PREFIX = "mugen:user:avatar-url:";
-
     private static final Map<String, String> EXTENSIONS = Map.of(
             "image/png", "png",
             "image/jpeg", "jpg",
             "image/webp", "webp");
 
     private final UserProfileRepository profiles;
-    private final MinioClientWrapper storage;
-    private final StringRedisTemplate redis;
+    private final ObjectStorage storage;
+    private final PresignedUrls presignedUrls;
     private final AvatarProperties avatarProperties;
 
     /**
@@ -69,31 +67,20 @@ public class AvatarService {
         }
 
         String previous = profile.replaceAvatar(objectKey);
-        redis.delete(URL_CACHE_PREFIX + userId);
         log.info("Avatar updated userId={}", userId);
 
         if (previous != null && !previous.equals(objectKey)) {
+            presignedUrls.forget(avatarProperties.bucket(), previous);
             storage.delete(avatarProperties.bucket(), previous);
         }
     }
 
-    /**
-     * A presigned GET URL for the profile's avatar, or null without one. Cached in
-     * Redis for less than the URL's own lifetime (CLAUDE.md: 50 of 60 minutes), so the
-     * signature is computed once per profile per cache window rather than per view.
-     */
+    /** A presigned GET URL for the profile's avatar, cached by the shared module, or null without one. */
     public String urlFor(UserProfile profile) {
         if (!profile.hasAvatar()) {
             return null;
         }
-        String cacheKey = URL_CACHE_PREFIX + profile.getId();
-        String cached = redis.opsForValue().get(cacheKey);
-        if (cached != null) {
-            return cached;
-        }
-        String url = storage.presignedGet(avatarProperties.bucket(), profile.getAvatarKey(), avatarProperties.urlTtl());
-        redis.opsForValue().set(cacheKey, url, avatarProperties.urlCacheTtl());
-        return url;
+        return presignedUrls.get(avatarProperties.bucket(), profile.getAvatarKey());
     }
 
     /** {@code <userId>/<random>.<ext>}: the prefix is ownership, the random part makes every upload a new object. */

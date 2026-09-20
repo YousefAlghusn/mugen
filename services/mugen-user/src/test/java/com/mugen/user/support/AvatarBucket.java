@@ -2,7 +2,7 @@ package com.mugen.user.support;
 
 import com.mugen.test.Fixture;
 import com.mugen.user.config.AvatarProperties;
-import com.mugen.user.config.MinioProperties;
+import com.mugen.storage.MinioProperties;
 import io.minio.BucketExistsArgs;
 import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;

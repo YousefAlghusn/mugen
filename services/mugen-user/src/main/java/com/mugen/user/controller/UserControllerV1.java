@@ -6,7 +6,7 @@ import com.mugen.user.dto.ProfileResponse;
 import com.mugen.user.dto.UpdateProfileRequest;
 import com.mugen.user.entity.UserProfile;
 import com.mugen.user.exception.UserExceptions;
-import com.mugen.user.pagination.Cursor;
+import com.mugen.web.pagination.Cursor;
 import com.mugen.user.service.AvatarService;
 import com.mugen.user.service.FollowService;
 import com.mugen.user.service.UserService;

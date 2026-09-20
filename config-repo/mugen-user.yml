@@ -3,8 +3,9 @@
 mugen:
   avatars:
     upload-url-ttl: ${MUGEN_AVATAR_UPLOAD_URL_TTL:10m}
-    url-ttl: ${MINIO_PRESIGNED_URL_TTL_MINUTES:60}m
-    url-cache-ttl: ${MINIO_PRESIGNED_URL_CACHE_TTL_MINUTES:50}m
+  minio:
+    presigned-url-ttl: ${MINIO_PRESIGNED_URL_TTL_MINUTES:60}m
+    presigned-url-cache-ttl: ${MINIO_PRESIGNED_URL_CACHE_TTL_MINUTES:50}m
 
   outbox:
     poll-interval: ${MUGEN_OUTBOX_POLL_INTERVAL:1s}

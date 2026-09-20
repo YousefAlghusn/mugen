@@ -1,5 +1,6 @@
 package com.mugen.user.config;
 
+import com.mugen.storage.MinioProperties;
 import com.mugen.web.openapi.MugenApiDocs;
 import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
@@ -16,7 +17,8 @@ import org.springframework.context.annotation.Configuration;
 public class OpenApiConfig {
 
     @Bean
-    OpenAPI userOpenApi(AvatarProperties avatarProperties, ObjectProvider<BuildProperties> buildProperties) {
+    OpenAPI userOpenApi(AvatarProperties avatarProperties, MinioProperties minioProperties,
+                        ObjectProvider<BuildProperties> buildProperties) {
         BuildProperties build = buildProperties.getIfAvailable();
         return new OpenAPI()
                 .info(new Info()
@@ -43,7 +45,7 @@ public class OpenApiConfig {
                                 ### Errors
                                 Every failure is an RFC 9457 `application/problem+json` document carrying a \
                                 `code` and a `traceId`. Quote the `traceId` when reporting a problem.
-                                """.formatted(avatarProperties.uploadUrlTtl().toMinutes(), avatarProperties.urlTtl().toMinutes()))
+                                """.formatted(avatarProperties.uploadUrlTtl().toMinutes(), minioProperties.presignedUrlTtl().toMinutes()))
                         .license(new License().name("Apache-2.0")))
                 .components(new Components()
                         .addSecuritySchemes(MugenApiDocs.BEARER_SCHEME, new SecurityScheme()

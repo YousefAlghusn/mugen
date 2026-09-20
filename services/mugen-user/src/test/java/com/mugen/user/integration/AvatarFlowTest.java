@@ -4,7 +4,7 @@ import com.mugen.shared.error.ErrorCode;
 import com.mugen.test.IntegrationTest;
 import com.mugen.test.Responses;
 import com.mugen.user.config.AvatarProperties;
-import com.mugen.user.storage.MinioClientWrapper;
+import com.mugen.storage.ObjectStorage;
 import com.mugen.user.support.Profiles;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -36,7 +36,7 @@ class AvatarFlowTest {
 
     @Autowired private MockMvc mvc;
     @Autowired private Profiles profiles;
-    @Autowired private MinioClientWrapper storage;
+    @Autowired private ObjectStorage storage;
     @Autowired private AvatarProperties avatarProperties;
 
     private final HttpClient http = HttpClient.newHttpClient();

@@ -1,6 +1,5 @@
-package com.mugen.user.storage;
+package com.mugen.storage;
 
-import com.mugen.user.config.MinioProperties;
 import io.minio.GetPresignedObjectUrlArgs;
 import io.minio.MinioClient;
 import io.minio.RemoveObjectArgs;
@@ -8,7 +7,6 @@ import io.minio.StatObjectArgs;
 import io.minio.errors.ErrorResponseException;
 import io.minio.http.Method;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.util.Map;
@@ -22,12 +20,11 @@ import java.util.Map;
  * about except log and answer 500.
  */
 @Slf4j
-@Component
-public class MinioClientWrapper {
+public class ObjectStorage {
 
     private final MinioClient minio;
 
-    public MinioClientWrapper(MinioProperties minioProperties) {
+    public ObjectStorage(MinioProperties minioProperties) {
         this.minio = MinioClient.builder()
                 .endpoint(minioProperties.endpoint())
                 .credentials(minioProperties.accessKey(), minioProperties.secretKey())

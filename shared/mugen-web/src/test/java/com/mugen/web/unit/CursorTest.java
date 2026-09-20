@@ -1,7 +1,6 @@
-package com.mugen.user.unit;
+package com.mugen.web.unit;
 
-import com.mugen.test.UnitTest;
-import com.mugen.user.pagination.Cursor;
+import com.mugen.web.pagination.Cursor;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -15,7 +14,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * A cursor that loses precision skips rows; one that accepts anything turns a typo
  * into a 500. Both are decisions the page query never sees.
  */
-@UnitTest
 class CursorTest {
 
     @Test

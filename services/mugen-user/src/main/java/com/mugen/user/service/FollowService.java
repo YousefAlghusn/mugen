@@ -6,7 +6,7 @@ import com.mugen.user.entity.Follow;
 import com.mugen.user.entity.FollowId;
 import com.mugen.user.entity.UserProfile;
 import com.mugen.user.exception.UserExceptions;
-import com.mugen.user.pagination.Cursor;
+import com.mugen.web.pagination.Cursor;
 import com.mugen.user.repository.FollowRepository;
 import com.mugen.user.repository.UserProfileRepository;
 import lombok.RequiredArgsConstructor;
